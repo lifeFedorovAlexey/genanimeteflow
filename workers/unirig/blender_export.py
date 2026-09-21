@@ -22,6 +22,123 @@ def _load_prediction(path: Path) -> dict[str, object]:
     return {name: data[name][()] for name in data}
 
 
+def _canonicalize_humanoid(data: dict[str, object]) -> list[str]:
+    """Name UniRig's ordered generic bones using its humanoid topology.
+
+    UniRig intentionally supports arbitrary creatures and therefore may emit
+    ``bone_N`` names.  The generated character pipeline is explicitly
+    humanoid, so derive Mixamo-compatible names from the predicted parent
+    graph and normalized joint positions before exporting the armature.
+    """
+    joints = np.asarray(data["joints"], dtype=np.float32)
+    tails = np.asarray(data["tails"], dtype=np.float32)
+    parents = [None if parent is None else int(parent) for parent in data["parents"]]
+    count = len(parents)
+    if count < 18:
+        raise ValueError(f"Humanoid canonical mapping needs at least 18 bones, got {count}")
+    children: list[list[int]] = [[] for _ in range(count)]
+    roots: list[int] = []
+    for index, parent in enumerate(parents):
+        if parent is None or parent < 0:
+            roots.append(index)
+        else:
+            children[parent].append(index)
+    if len(roots) != 1:
+        raise ValueError(f"Humanoid canonical mapping expects one root, got {len(roots)}")
+    root = roots[0]
+    names = [f"bone_{index}" for index in range(count)]
+    assigned: set[int] = set()
+
+    def assign(index: int, name: str) -> None:
+        if index in assigned:
+            raise ValueError(f"Humanoid canonical mapping reused bone {index}")
+        names[index] = f"mixamorig:{name}"
+        assigned.add(index)
+
+    def choose_trunk_child(index: int) -> int | None:
+        candidates = children[index]
+        if not candidates:
+            return None
+        return max(candidates, key=lambda child: (float(tails[child, 2]), -abs(float(joints[child, 0])), len(children[child])))
+
+    assign(root, "Hips")
+    trunk: list[int] = [root]
+    current = root
+    while True:
+        child = choose_trunk_child(current)
+        if child is None:
+            break
+        vector = tails[child] - joints[child]
+        if abs(float(joints[child, 0])) > 0.18 or float(vector[2]) < -0.02:
+            break
+        trunk.append(child)
+        current = child
+        if len(trunk) > 8:
+            break
+    trunk_names = ["Spine", "Spine1", "Spine2", "Neck", "Head"]
+    for index, name in zip(trunk[1:], trunk_names):
+        assign(index, name)
+    if len(trunk) < 4:
+        raise ValueError("Humanoid canonical mapping could not identify a torso chain")
+    chest = trunk[min(3, len(trunk) - 1)]
+
+    arm_roots = [child for child in children[chest] if child not in assigned and abs(float(joints[child, 0])) > 0.04]
+    if len(arm_roots) != 2:
+        raise ValueError(f"Humanoid canonical mapping expects two arm roots, got {len(arm_roots)}")
+    finger_labels = ["Index", "Middle", "Ring", "Pinky", "Thumb"]
+    for arm_root in sorted(arm_roots, key=lambda index: float(joints[index, 0])):
+        side = "Right" if joints[arm_root, 0] > 0 else "Left"
+        chain = [arm_root]
+        current = arm_root
+        while children[current]:
+            next_candidates = [child for child in children[current] if child not in assigned]
+            if not next_candidates:
+                break
+            # The first four links are shoulder/arm/forearm/hand. At hand the
+            # remaining children are finger chains and must not be folded into
+            # the main arm chain.
+            if len(chain) >= 4:
+                break
+            current = next_candidates[0]
+            chain.append(current)
+        for index, name in zip(chain, [f"{side}Shoulder", f"{side}Arm", f"{side}ForeArm", f"{side}Hand"]):
+            assign(index, name)
+        hand = chain[-1]
+        for finger_index, finger_root in enumerate([child for child in children[hand] if child not in assigned]):
+            label = finger_labels[finger_index] if finger_index < len(finger_labels) else f"Finger{finger_index + 1}"
+            current = finger_root
+            segment = 1
+            while True:
+                assign(current, f"{side}Hand{label}{segment}")
+                next_candidates = [child for child in children[current] if child not in assigned]
+                if not next_candidates:
+                    break
+                current = next_candidates[0]
+                segment += 1
+
+    leg_roots = [child for child in children[root] if child not in assigned]
+    if len(leg_roots) != 2:
+        raise ValueError(f"Humanoid canonical mapping expects two leg roots, got {len(leg_roots)}")
+    for leg_root in sorted(leg_roots, key=lambda index: float(joints[index, 0])):
+        side = "Right" if joints[leg_root, 0] > 0 else "Left"
+        chain = [leg_root]
+        current = leg_root
+        while children[current] and len(chain) < 4:
+            next_candidates = [child for child in children[current] if child not in assigned]
+            if not next_candidates:
+                break
+            current = next_candidates[0]
+            chain.append(current)
+        for index, name in zip(chain, [f"{side}UpLeg", f"{side}Leg", f"{side}Foot", f"{side}ToeBase"]):
+            assign(index, name)
+
+    required = {"mixamorig:Hips", "mixamorig:Spine", "mixamorig:Spine1", "mixamorig:Spine2", "mixamorig:Neck", "mixamorig:Head", "mixamorig:RightArm", "mixamorig:LeftArm", "mixamorig:RightUpLeg", "mixamorig:LeftUpLeg"}
+    missing = sorted(required - set(names))
+    if missing:
+        raise ValueError("Humanoid canonical mapping is incomplete: " + ", ".join(missing))
+    return names
+
+
 def _import_mesh(path: Path) -> list[object]:
     bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.ops.import_scene.gltf(filepath=str(path))
@@ -39,7 +156,7 @@ def _mesh_from_prediction(data: dict[str, object]) -> object:
     return obj
 
 
-def _add_armature(data: dict[str, object]) -> object:
+def _add_armature(data: dict[str, object], add_canonical_root: bool = False) -> object:
     joints = np.asarray(data["joints"], dtype=np.float32)
     tails = np.asarray(data.get("tails"), dtype=np.float32) if data.get("tails") is not None else None
     parents = list(data["parents"])
@@ -61,9 +178,16 @@ def _add_armature(data: dict[str, object]) -> object:
         if np.linalg.norm(np.asarray(bone.tail) - joint) < 1e-5:
             bone.tail = (joint + np.array([0, 0.05, 0], dtype=np.float32)).tolist()
         bones.append(bone)
+    canonical_root = None
+    if add_canonical_root:
+        canonical_root = arm_data.edit_bones.new("Root")
+        canonical_root.head = joints[0].tolist()
+        canonical_root.tail = (joints[0] + np.array([0, 0, 0.1], dtype=np.float32)).tolist()
     for index, parent in enumerate(parents):
         if parent is not None and int(parent) >= 0:
             bones[index].parent = bones[int(parent)]
+        elif canonical_root is not None:
+            bones[index].parent = canonical_root
     bpy.ops.object.mode_set(mode="OBJECT")
     armature.select_set(False)
     return armature
@@ -173,8 +297,8 @@ def main() -> None:
             raise FileNotFoundError(f"Expected UniRig skin prediction next to skeleton: {skin_path}")
         skin = _load_prediction(skin_path)
         sampled, bones, weights = _align_prediction_to_mesh(meshes, data, skin)
-        rig_data = {"joints": bones[:, :3], "tails": bones[:, 3:], "parents": data["parents"], "names": data["names"]}
-        armature = _add_armature(rig_data)
+        rig_data = {"joints": bones[:, :3], "tails": bones[:, 3:], "parents": data["parents"], "names": _canonicalize_humanoid(data)}
+        armature = _add_armature(rig_data, add_canonical_root=True)
     else:
         armature = _add_armature(data)
     if args.mode == "rigged":

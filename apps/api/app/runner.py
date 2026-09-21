@@ -381,7 +381,7 @@ class PipelineRunner:
         logger.info("Starting official UniRig worker")
         result = await asyncio.to_thread(self.process_manager.run_json_worker, [sys.executable, "-m", "workers.unirig.worker"], request, REPO_ROOT, env, log_path, process_key=f"{manifest.job_id}:{StageName.RIG.value}")
         rigged_mesh = Path(result.payload["rigged_mesh"])
-        report = validate_rigged_glb(rigged_mesh, require_canonical=False)
+        report = validate_rigged_glb(rigged_mesh, require_canonical=True)
         if not report.valid:
             raise WorkerFailure("RIG_VALIDATION_FAILED", "; ".join(report.errors))
         manifest.stages[StageName.RIG.value].result = {"provider": result.payload["provider"], "source_mesh": mesh_value, "mesh_path": str(rigged_mesh.relative_to(job_dir)), "skeleton": str(Path(result.payload["skeleton"]).relative_to(job_dir)), "skin": str(Path(result.payload["skin"]).relative_to(job_dir)), "validation": report.__dict__}
@@ -408,7 +408,7 @@ class PipelineRunner:
         result = await asyncio.to_thread(self.process_manager.run_json_worker, [sys.executable, "-m", "workers.blender.export_worker"], request, REPO_ROOT, {"BLENDER_PATH": blender}, log_path, process_key=f"{manifest.job_id}:{StageName.EXPORT.value}")
         roundtrip = result.payload.get("roundtrip", {})
         glb_report = validate_glb(glb_path, require_skeleton=True, require_animations=True)
-        rig_report = validate_rigged_glb(glb_path, require_canonical=False)
+        rig_report = validate_rigged_glb(glb_path, require_canonical=True)
         if not glb_report.valid or not rig_report.valid:
             raise WorkerFailure("EXPORT_ROUNDTRIP_FAILED", "; ".join(glb_report.errors + rig_report.errors))
         manifest_path = save_unit_manifest(manifest, job_dir, glb_path, fbx_path, {**roundtrip, "glb": glb_report.__dict__, "rig": rig_report.__dict__})
@@ -436,7 +436,7 @@ class PipelineRunner:
         logger.info("Attaching %s equipment assets", len(assets))
         result = await asyncio.to_thread(self.process_manager.run_json_worker, [sys.executable, "-m", "workers.blender.equipment_worker"], request, REPO_ROOT, {"BLENDER_PATH": blender}, log_path, process_key=f"{manifest.job_id}:{StageName.EQUIPMENT.value}")
         report = validate_glb(output_mesh, require_skeleton=True)
-        rig_report = validate_rigged_glb(output_mesh, require_canonical=False)
+        rig_report = validate_rigged_glb(output_mesh, require_canonical=True)
         if not report.valid or not rig_report.valid:
             raise WorkerFailure("EQUIPMENT_OUTPUT_INVALID", "; ".join(report.errors + rig_report.errors))
         manifest.stages[StageName.EQUIPMENT.value].result = {"mesh_path": str(output_mesh.relative_to(job_dir)), "assets": assets, "sockets": result.payload.get("sockets", []), "worker": result.payload, "validation": {"glb": report.__dict__, "rig": rig_report.__dict__}}
@@ -466,7 +466,7 @@ class PipelineRunner:
             logger.info("Normalizing motion clip %s", clip["id"])
             result = await asyncio.to_thread(self.process_manager.run_json_worker, [sys.executable, "-m", "workers.blender.normalize_worker"], request, REPO_ROOT, {"BLENDER_PATH": blender}, log_path, process_key=f"{manifest.job_id}:{StageName.MOTIONS.value}")
             report = validate_glb(output_mesh, require_skeleton=True, require_animations=True)
-            rig_report = validate_rigged_glb(output_mesh, require_canonical=False)
+            rig_report = validate_rigged_glb(output_mesh, require_canonical=True)
             if not report.valid or not rig_report.valid:
                 raise WorkerFailure("MOTION_OUTPUT_INVALID", "; ".join(report.errors + rig_report.errors))
             normalized.append({"clip_id": clip["id"], "source": clip["source_file"], "action": clip["name"], "category": clip.get("category", clip["name"]), "duration": clip.get("duration"), "loop": clip.get("loop", False), "required_equipment_type": clip.get("requiredEquipmentType"), "mesh_path": str(output_mesh.relative_to(job_dir)), "license": clip["license"], "allowed_for_commercial_use": clip["allowed_for_commercial_use"], "worker": result.payload, "validation": {"glb": report.__dict__, "rig": rig_report.__dict__}})
