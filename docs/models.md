@@ -8,7 +8,15 @@ Official repository: https://github.com/Stability-AI/stable-point-aware-3d
 
 SPAR3D documents an official `run.py` CLI. Its documented low-VRAM mode is expected to use roughly 7 GB instead of roughly 10.5 GB, but the application still records the real peak measured by the worker. Windows support is documented as experimental by the upstream project.
 
-Example manual setup:
+On Windows, use the repository installer to clone the official checkout, create an isolated environment, install CUDA PyTorch for the RTX 4070 and persist the two paths:
+
+```powershell
+.\scripts\install_spar3d.ps1 -PersistPaths
+```
+
+The model is gated: before the first generation, accept access to `stabilityai/stable-point-aware-3d` on Hugging Face and log in with a read token in the SPAR3D environment. The installer intentionally does not ask for, store, or transmit a token.
+
+For an existing installation, these are the two paths Character Factory uses:
 
 ```powershell
 $env:SPAR3D_ROOT = 'D:\models\stable-point-aware-3d'

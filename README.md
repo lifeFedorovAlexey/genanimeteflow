@@ -40,4 +40,4 @@ Open http://127.0.0.1:5173. The API is localhost-only at http://127.0.0.1:8000.
 - UX direction: the application must explain the next action and blockers visually, with technical diagnostics kept secondary to clear action-oriented controls
 - honest provider capability reporting: unavailable ML stages are not simulated
 
-The model workers, Blender and motion assets must be installed and version-pinned before their stages can be enabled. See [docs/models.md](docs/models.md) and run `scripts/check_workers.ps1`; no generated mesh or animation is bundled or represented as a fake result.
+The model workers, Blender and motion assets must be installed and version-pinned before their stages can be enabled. For the 3D generator, run `scripts/install_spar3d.ps1 -PersistPaths`, then follow the one-time Hugging Face access step in [docs/models.md](docs/models.md). Run `scripts/check_workers.ps1` to verify local workers; no generated mesh or animation is bundled or represented as a fake result.
