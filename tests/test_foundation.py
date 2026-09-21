@@ -3,6 +3,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 import sys
+import asyncio
 from pathlib import Path
 
 from PIL import Image, ImageDraw
@@ -11,11 +12,33 @@ from app.job_store import JobStore
 from app.model_registry import ModelRegistry
 from app.process_manager import ProcessManager, WorkerFailure
 from app.pipeline_graph import downstream
+from app.runner import SingleGpuQueue
 from app.reference_pipeline import assess_reference, preprocess_reference
 from app.schemas import JobCreateRequest, StageName, StageStatus
 
 
 class FoundationTests(unittest.TestCase):
+    def test_single_gpu_queue_serializes_operations(self) -> None:
+        async def scenario() -> int:
+            queue = SingleGpuQueue()
+            active = 0
+            peak = 0
+            guard = asyncio.Lock()
+
+            async def operation() -> None:
+                nonlocal active, peak
+                async with guard:
+                    active += 1
+                    peak = max(peak, active)
+                await asyncio.sleep(0)
+                async with guard:
+                    active -= 1
+
+            await asyncio.gather(queue.run(operation), queue.run(operation))
+            return peak
+
+        self.assertEqual(asyncio.run(scenario()), 1)
+
     def test_model_registry_reports_uninstalled_workers_without_claiming_availability(self) -> None:
         statuses = ModelRegistry().status()
         self.assertTrue(any(item["id"] == "spar3d" for item in statuses))

@@ -82,18 +82,11 @@ class PipelineRunner:
         started = record.started_at
         try:
             logger.info("Stage started: %s", stage.value)
-            if stage is StageName.REFERENCES:
-                await self._references(manifest, logger)
-            elif stage is StageName.GEOMETRY:
-                await self._geometry(manifest, logger, log_path)
-            elif stage is StageName.TEXTURES:
-                await self._textures(manifest, logger)
-            elif stage is StageName.RETOPOLOGY:
-                await self._retopology(manifest, logger, log_path)
-            elif stage is StageName.RIG:
-                await self._rig(manifest, logger, log_path)
+            heavy_stages = {StageName.GEOMETRY, StageName.RETOPOLOGY, StageName.RIG, StageName.MOTIONS, StageName.EXPORT}
+            if stage in heavy_stages:
+                await self.queue.run(lambda: self._execute_stage(manifest, stage, logger, log_path))
             else:
-                raise RuntimeError(f"Stage '{stage.value}' is not available until its required local provider is installed")
+                await self._execute_stage(manifest, stage, logger, log_path)
             record.status = StageStatus.READY
             record.result = {**record.result, "completed": True}
             logger.info("Stage completed")
@@ -119,6 +112,20 @@ class PipelineRunner:
             for handler in logger.handlers:
                 handler.close()
                 logger.removeHandler(handler)
+
+    async def _execute_stage(self, manifest: JobManifest, stage: StageName, logger: logging.Logger, log_path: Path) -> None:
+        if stage is StageName.REFERENCES:
+            await self._references(manifest, logger)
+        elif stage is StageName.GEOMETRY:
+            await self._geometry(manifest, logger, log_path)
+        elif stage is StageName.TEXTURES:
+            await self._textures(manifest, logger)
+        elif stage is StageName.RETOPOLOGY:
+            await self._retopology(manifest, logger, log_path)
+        elif stage is StageName.RIG:
+            await self._rig(manifest, logger, log_path)
+        else:
+            raise RuntimeError(f"Stage '{stage.value}' is not available until its required local provider is installed")
 
     async def _references(self, manifest: JobManifest, logger: logging.Logger) -> None:
         job_dir = self.store.job_dir(manifest.job_id)
