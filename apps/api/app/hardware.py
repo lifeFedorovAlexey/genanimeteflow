@@ -12,6 +12,7 @@ from typing import Any
 
 import psutil
 
+from .blender_discovery import blender_path
 from .config import HARDWARE_PROFILE
 from .storage import atomic_write_json
 
@@ -45,7 +46,7 @@ def _nvidia() -> dict[str, Any]:
 
 def detect_hardware() -> dict[str, Any]:
     disk = shutil.disk_usage(Path.cwd())
-    blender = shutil.which("blender")
+    blender = blender_path()
     profile: dict[str, Any] = {
         "detected_at": datetime.now(UTC).isoformat(),
         "os": {"system": platform.system(), "release": platform.release(), "version": platform.version(), "machine": platform.machine()},

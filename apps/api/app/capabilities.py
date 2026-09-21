@@ -4,13 +4,14 @@ import shutil
 import os
 from pathlib import Path
 
+from .blender_discovery import blender_path
 from .model_registry import ModelRegistry
 from .motion_library import MotionLibrary
 from .equipment_library import EquipmentLibrary
 
 
 def capabilities() -> dict:
-    blender = shutil.which("blender")
+    blender = blender_path()
     models = ModelRegistry().status()
     spar3d = next(item for item in models if item["id"] == "spar3d")
     unirig_root = os.getenv("UNIRIG_ROOT")

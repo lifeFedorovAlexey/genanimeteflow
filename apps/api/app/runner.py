@@ -4,13 +4,13 @@ import asyncio
 import logging
 import os
 import re
-import shutil
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Awaitable, Callable
 
 from .job_store import JobStore
+from .blender_discovery import blender_path
 from .config import REPO_ROOT
 from .model_registry import ModelRegistry
 from .motion_library import MotionLibrary
@@ -229,7 +229,7 @@ class PipelineRunner:
         mesh_value = textures.result.get("source_mesh")
         if textures.status is not StageStatus.READY or not isinstance(mesh_value, str):
             raise RuntimeError("Textures must be READY before retopology")
-        blender = shutil.which("blender")
+        blender = blender_path()
         if not blender:
             raise WorkerFailure("BLENDER_MISSING", "Blender executable was not found")
         job_dir = self.store.job_dir(manifest.job_id)
@@ -271,7 +271,7 @@ class PipelineRunner:
         mesh_value = rig.result.get("mesh_path")
         if rig.status is not StageStatus.READY or not isinstance(mesh_value, str):
             raise RuntimeError("Rig must be READY before export")
-        blender = shutil.which("blender")
+        blender = blender_path()
         if not blender:
             raise WorkerFailure("BLENDER_MISSING", "Blender executable was not found")
         job_dir = self.store.job_dir(manifest.job_id)
@@ -299,7 +299,7 @@ class PipelineRunner:
         mesh_value = rig.result.get("mesh_path")
         if rig.status is not StageStatus.READY or not isinstance(mesh_value, str):
             raise RuntimeError("Rig must be READY before equipment attachment")
-        blender = shutil.which("blender")
+        blender = blender_path()
         if not blender:
             raise WorkerFailure("BLENDER_MISSING", "Blender executable was not found")
         job_dir = self.store.job_dir(manifest.job_id)
@@ -326,7 +326,7 @@ class PipelineRunner:
         mesh_value = rig.result.get("mesh_path")
         if rig.status is not StageStatus.READY or not isinstance(mesh_value, str):
             raise RuntimeError("Rig must be READY before motion normalization")
-        blender = shutil.which("blender")
+        blender = blender_path()
         if not blender:
             raise WorkerFailure("BLENDER_MISSING", "Blender executable was not found")
         job_dir = self.store.job_dir(manifest.job_id)
