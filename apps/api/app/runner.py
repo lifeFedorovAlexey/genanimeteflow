@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import shutil
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -86,6 +87,8 @@ class PipelineRunner:
                 await self._geometry(manifest, logger, log_path)
             elif stage is StageName.TEXTURES:
                 await self._textures(manifest, logger)
+            elif stage is StageName.RETOPOLOGY:
+                await self._retopology(manifest, logger, log_path)
             else:
                 raise RuntimeError(f"Stage '{stage.value}' is not available until its required local provider is installed")
             record.status = StageStatus.READY
@@ -199,3 +202,23 @@ class PipelineRunner:
         manifest.stages[StageName.TEXTURES.value].result = {"source_mesh": mesh_value, "images": [{**item, "path": str(Path(item["path"]).relative_to(job_dir))} for item in images], "material_count": materials, "warnings": warnings}
         manifest.warnings.extend(warnings)
         logger.info("Extracted %s embedded texture images", len(images))
+
+    async def _retopology(self, manifest: JobManifest, logger: logging.Logger, log_path: Path) -> None:
+        textures = manifest.stages[StageName.TEXTURES.value]
+        mesh_value = textures.result.get("source_mesh")
+        if textures.status is not StageStatus.READY or not isinstance(mesh_value, str):
+            raise RuntimeError("Textures must be READY before retopology")
+        blender = shutil.which("blender")
+        if not blender:
+            raise WorkerFailure("BLENDER_MISSING", "Blender executable was not found")
+        job_dir = self.store.job_dir(manifest.job_id)
+        source_mesh = job_dir / mesh_value
+        output_mesh = job_dir / "retopology" / "triangle.glb"
+        request = {"source_mesh": str(source_mesh), "output_mesh": str(output_mesh), "mode": "TRIANGLE", "target_faces": 30000}
+        logger.info("Starting Blender retopology worker: %s", request)
+        result = await asyncio.to_thread(self.process_manager.run_json_worker, [sys.executable, "-m", "workers.blender.worker"], request, REPO_ROOT, {"BLENDER_PATH": blender}, log_path)
+        report = validate_glb(output_mesh)
+        if not report.valid:
+            raise WorkerFailure("RETOPOLOGY_OUTPUT_INVALID", "; ".join(report.errors))
+        manifest.stages[StageName.RETOPOLOGY.value].result = {"mode": result.payload.get("mode"), "source_mesh": mesh_value, "mesh_path": str(output_mesh.relative_to(job_dir)), "target_faces": request["target_faces"], "validation": report.__dict__}
+        logger.info("Retopology output saved: %s", output_mesh)
