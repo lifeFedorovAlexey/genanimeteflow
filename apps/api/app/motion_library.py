@@ -26,6 +26,21 @@ class MotionLibrary:
         with self.catalog_path.open("r", encoding="utf-8") as handle:
             return json.load(handle)
 
+    def clips(self) -> dict[str, dict[str, Any]]:
+        result: dict[str, dict[str, Any]] = {}
+        for library in self.catalog().get("libraries", []):
+            for clip in library.get("clips", []):
+                enriched = {**clip, "library_id": library.get("id"), "license": library.get("license"), "allowed_for_commercial_use": library.get("allowed_for_commercial_use", False)}
+                result[str(clip["id"])] = enriched
+        return result
+
+    def selected_clips(self, clip_ids: list[str]) -> list[dict[str, Any]]:
+        available = self.clips()
+        missing = [clip_id for clip_id in clip_ids if clip_id not in available]
+        if missing:
+            raise MotionLibraryError("Unknown motion clip IDs: " + ", ".join(missing))
+        return [available[clip_id] for clip_id in clip_ids]
+
     def register_local(self, source_path: Path, library_id: str, source_id: str, license_text: str, allowed_for_commercial_use: bool) -> dict[str, Any]:
         source_path = source_path.expanduser().resolve()
         if not source_path.is_file():

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 import shutil
 import sys
 from datetime import UTC, datetime
@@ -12,6 +13,7 @@ from typing import Awaitable, Callable
 from .job_store import JobStore
 from .config import REPO_ROOT
 from .model_registry import ModelRegistry
+from .motion_library import MotionLibrary
 from .pipeline_graph import STAGE_DEPENDENCIES
 from .process_manager import ProcessManager, WorkerFailure
 from tools.validation.glb import extract_glb_images, validate_glb
@@ -126,6 +128,8 @@ class PipelineRunner:
             await self._retopology(manifest, logger, log_path)
         elif stage is StageName.RIG:
             await self._rig(manifest, logger, log_path)
+        elif stage is StageName.MOTIONS:
+            await self._motions(manifest, logger, log_path)
         elif stage is StageName.EXPORT:
             await self._export(manifest, logger, log_path)
         else:
@@ -282,3 +286,34 @@ class PipelineRunner:
         manifest_path = save_unit_manifest(manifest, job_dir, glb_path, fbx_path, {**roundtrip, "glb": glb_report.__dict__, "rig": rig_report.__dict__})
         manifest.stages[StageName.EXPORT.value].result = {"glb_path": str(glb_path.relative_to(job_dir)), "fbx_path": str(fbx_path.relative_to(job_dir)), "manifest_path": str(manifest_path.relative_to(job_dir)), "selected_actions": manifest.export_actions, "roundtrip": {**roundtrip, "glb": glb_report.__dict__, "rig": rig_report.__dict__}}
         logger.info("Export completed: %s", glb_path)
+
+    async def _motions(self, manifest: JobManifest, logger: logging.Logger, log_path: Path) -> None:
+        if not manifest.motion_clips:
+            raise RuntimeError("Select at least one installed motion clip before normalization")
+        rig = manifest.stages[StageName.RIG.value]
+        mesh_value = rig.result.get("mesh_path")
+        if rig.status is not StageStatus.READY or not isinstance(mesh_value, str):
+            raise RuntimeError("Rig must be READY before motion normalization")
+        blender = shutil.which("blender")
+        if not blender:
+            raise WorkerFailure("BLENDER_MISSING", "Blender executable was not found")
+        job_dir = self.store.job_dir(manifest.job_id)
+        target_rig = job_dir / mesh_value
+        clips = MotionLibrary().selected_clips(manifest.motion_clips)
+        normalized: list[dict] = []
+        for index, clip in enumerate(clips):
+            source_motion = Path(str(clip["source_file"]))
+            if not source_motion.is_file():
+                raise WorkerFailure("MOTION_SOURCE_MISSING", f"Motion source does not exist: {source_motion}")
+            safe_name = re.sub(r"[^A-Za-z0-9._-]+", "_", str(clip["name"])).strip("._") or f"clip_{index:03d}"
+            output_mesh = job_dir / "motions" / "normalized" / f"{index:03d}_{safe_name}.glb"
+            request = {"source_motion": str(source_motion), "target_rig": str(target_rig), "output_mesh": str(output_mesh), "action": clip["name"]}
+            logger.info("Normalizing motion clip %s", clip["id"])
+            result = await asyncio.to_thread(self.process_manager.run_json_worker, [sys.executable, "-m", "workers.blender.normalize_worker"], request, REPO_ROOT, {"BLENDER_PATH": blender}, log_path)
+            report = validate_glb(output_mesh, require_skeleton=True, require_animations=True)
+            rig_report = validate_rigged_glb(output_mesh, require_canonical=False)
+            if not report.valid or not rig_report.valid:
+                raise WorkerFailure("MOTION_OUTPUT_INVALID", "; ".join(report.errors + rig_report.errors))
+            normalized.append({"clip_id": clip["id"], "source": clip["source_file"], "action": clip["name"], "mesh_path": str(output_mesh.relative_to(job_dir)), "license": clip["license"], "allowed_for_commercial_use": clip["allowed_for_commercial_use"], "worker": result.payload, "validation": {"glb": report.__dict__, "rig": rig_report.__dict__}})
+        manifest.stages[StageName.MOTIONS.value].result = {"clips": normalized, "target_rig": mesh_value}
+        logger.info("Normalized %s motion clips", len(normalized))

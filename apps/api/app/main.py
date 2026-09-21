@@ -16,7 +16,7 @@ from .model_registry import ModelRegistry
 from .motion_library import MotionLibrary, MotionLibraryError
 from .pipeline_graph import STAGE_DEPENDENCIES
 from .runner import PipelineRunner, SingleGpuQueue
-from .schemas import ExportSelectionRequest, JobCreateRequest, JobManifest, MotionRegisterRequest, ReferenceSlot, Settings, StageName
+from .schemas import ExportSelectionRequest, JobCreateRequest, JobManifest, MotionRegisterRequest, MotionSelectionRequest, ReferenceSlot, Settings, StageName
 from .storage import atomic_write_json, read_json
 
 ensure_directories()
@@ -65,6 +65,18 @@ def register_motion_library(request: MotionRegisterRequest) -> dict:
 def set_export_selection(job_id: str, request: ExportSelectionRequest) -> JobManifest:
     manifest = get_job(job_id)
     manifest.export_actions = request.actions
+    store.save(manifest)
+    return manifest
+
+
+@app.put("/api/jobs/{job_id}/motion-selection", response_model=JobManifest)
+def set_motion_selection(job_id: str, request: MotionSelectionRequest) -> JobManifest:
+    manifest = get_job(job_id)
+    try:
+        MotionLibrary().selected_clips(request.clips)
+    except MotionLibraryError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    manifest.motion_clips = request.clips
     store.save(manifest)
     return manifest
 

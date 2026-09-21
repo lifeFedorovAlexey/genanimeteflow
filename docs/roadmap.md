@@ -24,7 +24,7 @@ Each checked item must have working code, automated coverage where practical, a 
 - [x] Implement UniRig worker, canonical mapping and skin-weight validation (runtime requires official checkout and checkpoint)
 - [ ] Implement licensed motion library installation, normalization and catalog validation
 - [x] Add real Blender canonical-bone retarget worker with bake and GLB roundtrip validation (runtime requires Blender and installed source clips)
-- [ ] Connect installed motion libraries to job selection and catalog validation
+- [x] Connect installed motion clips to job selection, catalog validation and the motions stage
 - [ ] Connect graph evaluation to retargeted Blender actions and playable Unit Tester controls
 - [ ] Implement retargeting and the canonical animation graph
 - [ ] Implement equipment, clothing, sockets and IK validation
