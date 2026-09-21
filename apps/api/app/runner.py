@@ -72,8 +72,9 @@ class PipelineRunner:
         task = self.tasks.get((job_id, stage.value))
         if not task or task.done():
             return False
+        process_cancelled = self.process_manager.cancel(f"{job_id}:{stage.value}")
         task.cancel()
-        return True
+        return process_cancelled or True
 
     async def _run(self, job_id: str, stage: StageName) -> None:
         manifest = self.store.get(job_id)
@@ -81,6 +82,11 @@ class PipelineRunner:
         logger, log_path = self._logger(manifest, stage.value)
         record.status = StageStatus.RUNNING
         record.started_at = datetime.now(UTC)
+        record.finished_at = None
+        record.duration_seconds = None
+        record.error_category = None
+        record.error_message = None
+        record.result = {}
         record.log_path = str(log_path.relative_to(self.store.root.parent))
         manifest.status = "RUNNING"
         self.store.save(manifest)
@@ -166,7 +172,14 @@ class PipelineRunner:
             raise WorkerFailure("MODEL_MISSING", str(spar3d["reason"]))
         job_dir = self.store.job_dir(manifest.job_id)
         output_dir = job_dir / "geometry" / "spar3d"
-        settings = {"texture_resolution": 1024, "low_vram_mode": manifest.profile == "SAFE", "remesh": "none"}
+        profile = manifest.profile.upper()
+        settings = {
+            # The official SPAR3D low-VRAM path is ~7 GB and leaves headroom for
+            # Windows, the browser and the API on the target RTX 4070 12 GB card.
+            "texture_resolution": 512 if profile in {"SAFE", "BALANCED"} else 1024,
+            "low_vram_mode": profile in {"SAFE", "BALANCED"},
+            "remesh": "none",
+        }
         retry_history: list[dict] = []
         result = None
         vram_metrics: dict = {}
@@ -178,7 +191,7 @@ class PipelineRunner:
             before = monitor.snapshot()
             monitor.start()
             try:
-                result = await asyncio.to_thread(self.process_manager.run_json_worker, [sys.executable, "-m", "workers.spar3d.worker"], request, REPO_ROOT, {"SPAR3D_ROOT": str(spar3d["root"]), **({"SPAR3D_PYTHON": spar3d["python"]} if spar3d["python"] else {})}, attempt_log)
+                result = await asyncio.to_thread(self.process_manager.run_json_worker, [sys.executable, "-m", "workers.spar3d.worker"], request, REPO_ROOT, {"SPAR3D_ROOT": str(spar3d["root"]), **({"SPAR3D_PYTHON": spar3d["python"]} if spar3d["python"] else {})}, attempt_log, process_key=f"{manifest.job_id}:{StageName.GEOMETRY.value}")
             except WorkerFailure as error:
                 metrics = monitor.stop()
                 metrics["before"] = before or metrics.get("before")
@@ -237,7 +250,7 @@ class PipelineRunner:
         output_mesh = job_dir / "retopology" / "triangle.glb"
         request = {"source_mesh": str(source_mesh), "output_mesh": str(output_mesh), "mode": "TRIANGLE", "target_faces": 30000}
         logger.info("Starting Blender retopology worker: %s", request)
-        result = await asyncio.to_thread(self.process_manager.run_json_worker, [sys.executable, "-m", "workers.blender.worker"], request, REPO_ROOT, {"BLENDER_PATH": blender}, log_path)
+        result = await asyncio.to_thread(self.process_manager.run_json_worker, [sys.executable, "-m", "workers.blender.worker"], request, REPO_ROOT, {"BLENDER_PATH": blender}, log_path, process_key=f"{manifest.job_id}:{StageName.RETOPOLOGY.value}")
         report = validate_glb(output_mesh)
         if not report.valid:
             raise WorkerFailure("RETOPOLOGY_OUTPUT_INVALID", "; ".join(report.errors))
@@ -256,7 +269,7 @@ class PipelineRunner:
         unirig_root = os.getenv("UNIRIG_ROOT")
         env = {"UNIRIG_ROOT": unirig_root} if unirig_root else {}
         logger.info("Starting official UniRig worker")
-        result = await asyncio.to_thread(self.process_manager.run_json_worker, [sys.executable, "-m", "workers.unirig.worker"], request, REPO_ROOT, env, log_path)
+        result = await asyncio.to_thread(self.process_manager.run_json_worker, [sys.executable, "-m", "workers.unirig.worker"], request, REPO_ROOT, env, log_path, process_key=f"{manifest.job_id}:{StageName.RIG.value}")
         rigged_mesh = Path(result.payload["rigged_mesh"])
         report = validate_rigged_glb(rigged_mesh, require_canonical=False)
         if not report.valid:
@@ -282,7 +295,7 @@ class PipelineRunner:
         fbx_path = job_dir / "export" / "unit.fbx"
         request = {"source_mesh": str(source_mesh), "glb_output": str(glb_path), "fbx_output": str(fbx_path), "selected_actions": manifest.export_actions}
         logger.info("Starting Blender export worker: %s", request)
-        result = await asyncio.to_thread(self.process_manager.run_json_worker, [sys.executable, "-m", "workers.blender.export_worker"], request, REPO_ROOT, {"BLENDER_PATH": blender}, log_path)
+        result = await asyncio.to_thread(self.process_manager.run_json_worker, [sys.executable, "-m", "workers.blender.export_worker"], request, REPO_ROOT, {"BLENDER_PATH": blender}, log_path, process_key=f"{manifest.job_id}:{StageName.EXPORT.value}")
         roundtrip = result.payload.get("roundtrip", {})
         glb_report = validate_glb(glb_path, require_skeleton=True, require_animations=True)
         rig_report = validate_rigged_glb(glb_path, require_canonical=False)
@@ -311,7 +324,7 @@ class PipelineRunner:
         output_mesh = job_dir / "equipment" / "attached.glb"
         request = {"target_rig": str(job_dir / mesh_value), "output_mesh": str(output_mesh), "assets": assets}
         logger.info("Attaching %s equipment assets", len(assets))
-        result = await asyncio.to_thread(self.process_manager.run_json_worker, [sys.executable, "-m", "workers.blender.equipment_worker"], request, REPO_ROOT, {"BLENDER_PATH": blender}, log_path)
+        result = await asyncio.to_thread(self.process_manager.run_json_worker, [sys.executable, "-m", "workers.blender.equipment_worker"], request, REPO_ROOT, {"BLENDER_PATH": blender}, log_path, process_key=f"{manifest.job_id}:{StageName.EQUIPMENT.value}")
         report = validate_glb(output_mesh, require_skeleton=True)
         rig_report = validate_rigged_glb(output_mesh, require_canonical=False)
         if not report.valid or not rig_report.valid:
@@ -341,7 +354,7 @@ class PipelineRunner:
             output_mesh = job_dir / "motions" / "normalized" / f"{index:03d}_{safe_name}.glb"
             request = {"source_motion": str(source_motion), "target_rig": str(target_rig), "output_mesh": str(output_mesh), "action": clip["name"]}
             logger.info("Normalizing motion clip %s", clip["id"])
-            result = await asyncio.to_thread(self.process_manager.run_json_worker, [sys.executable, "-m", "workers.blender.normalize_worker"], request, REPO_ROOT, {"BLENDER_PATH": blender}, log_path)
+            result = await asyncio.to_thread(self.process_manager.run_json_worker, [sys.executable, "-m", "workers.blender.normalize_worker"], request, REPO_ROOT, {"BLENDER_PATH": blender}, log_path, process_key=f"{manifest.job_id}:{StageName.MOTIONS.value}")
             report = validate_glb(output_mesh, require_skeleton=True, require_animations=True)
             rig_report = validate_rigged_glb(output_mesh, require_canonical=False)
             if not report.valid or not rig_report.valid:

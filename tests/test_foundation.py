@@ -4,6 +4,8 @@ import tempfile
 import unittest
 import sys
 import asyncio
+import threading
+import time
 from pathlib import Path
 
 from PIL import Image, ImageDraw
@@ -49,6 +51,37 @@ class FoundationTests(unittest.TestCase):
             with self.assertRaises(WorkerFailure) as context:
                 ProcessManager().run_json_worker([sys.executable, "-c", "print('not json')"], {}, Path(temporary), {}, Path(temporary) / "worker.log")
             self.assertEqual(context.exception.category, "WORKER_PROTOCOL")
+
+    def test_cancel_terminates_active_worker_process(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            manager = ProcessManager()
+            failures: list[WorkerFailure] = []
+
+            def run_worker() -> None:
+                try:
+                    manager.run_json_worker(
+                        [sys.executable, "-c", "import time; time.sleep(30)"],
+                        {},
+                        Path(temporary),
+                        {},
+                        Path(temporary) / "worker.log",
+                        process_key="cancel-test",
+                    )
+                except WorkerFailure as error:
+                    failures.append(error)
+
+            thread = threading.Thread(target=run_worker)
+            thread.start()
+            cancelled = False
+            for _ in range(100):
+                cancelled = manager.cancel("cancel-test")
+                if cancelled:
+                    break
+                time.sleep(0.05)
+            thread.join(timeout=5)
+            self.assertTrue(cancelled)
+            self.assertFalse(thread.is_alive())
+            self.assertTrue(failures)
 
     def test_job_store_creates_persistent_stage_layout(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
