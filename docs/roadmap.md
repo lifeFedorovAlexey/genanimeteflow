@@ -31,7 +31,7 @@ Each checked item must have working code, automated coverage where practical, a 
 - [ ] Implement equipment, clothing, sockets and IK validation
 - [x] Add validated local equipment manifest/catalog registration with license-independent provenance and socket/grip metadata
 - [x] Add Blender rigid-equipment socket attachment stage with output and skeleton validation (skinned clothing and IK remain separate stages)
-- [x] Load validated GLB assets in Unit Tester (viewer controls are still minimal)
+- [x] Load validated GLB assets in Unit Tester with embedded clip playback, WASD movement states and wireframe/skeleton debug toggles
 - [x] Implement GLB/FBX export worker and manifest roundtrip validation (runtime requires Blender and selected normalized actions)
 - [ ] Harden recovery, cancellation, cache cleanup, security and full acceptance test
 

@@ -8,6 +8,9 @@ dist/
 jobs/*/references/original/
 jobs/*/references/processed/
 jobs/*/logs/
+jobs/*/job.json
+assets/equipment/*
+.vite-cache/
 hardware_profile.json
 *.tmp
 *.part
