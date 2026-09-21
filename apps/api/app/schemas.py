@@ -95,3 +95,15 @@ class ExportSelectionRequest(BaseModel):
 
 class MotionSelectionRequest(BaseModel):
     clips: list[str] = Field(default_factory=list)
+
+
+class EquipmentRegisterRequest(BaseModel):
+    source_path: str
+    asset_id: str
+    name: str
+    asset_type: str
+    slot: str
+    handedness: str | None = None
+    primary_socket: str | None = None
+    secondary_grip: dict[str, Any] | None = None
+    tags: list[str] = Field(default_factory=list)

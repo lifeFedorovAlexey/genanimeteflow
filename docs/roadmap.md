@@ -28,6 +28,7 @@ Each checked item must have working code, automated coverage where practical, a 
 - [ ] Connect graph evaluation to retargeted Blender actions and playable Unit Tester controls
 - [ ] Implement retargeting and the canonical animation graph
 - [ ] Implement equipment, clothing, sockets and IK validation
+- [x] Add validated local equipment manifest/catalog registration with license-independent provenance and socket/grip metadata
 - [x] Load validated GLB assets in Unit Tester (viewer controls are still minimal)
 - [x] Implement GLB/FBX export worker and manifest roundtrip validation (runtime requires Blender and selected normalized actions)
 - [ ] Harden recovery, cancellation, cache cleanup, security and full acceptance test

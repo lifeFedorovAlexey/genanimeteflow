@@ -10,13 +10,14 @@ from fastapi.responses import FileResponse, StreamingResponse
 
 from .config import ensure_directories
 from .capabilities import capabilities
+from .equipment_library import EquipmentLibrary, EquipmentLibraryError
 from .hardware import detect_hardware
 from .job_store import JobStore
 from .model_registry import ModelRegistry
 from .motion_library import MotionLibrary, MotionLibraryError
 from .pipeline_graph import STAGE_DEPENDENCIES
 from .runner import PipelineRunner, SingleGpuQueue
-from .schemas import ExportSelectionRequest, JobCreateRequest, JobManifest, MotionRegisterRequest, MotionSelectionRequest, ReferenceSlot, Settings, StageName
+from .schemas import EquipmentRegisterRequest, ExportSelectionRequest, JobCreateRequest, JobManifest, MotionRegisterRequest, MotionSelectionRequest, ReferenceSlot, Settings, StageName
 from .storage import atomic_write_json, read_json
 
 ensure_directories()
@@ -51,6 +52,19 @@ def get_models() -> list[dict]:
 @app.get("/api/motions")
 def get_motions() -> dict:
     return MotionLibrary().catalog()
+
+
+@app.get("/api/equipment")
+def get_equipment() -> dict:
+    return EquipmentLibrary().catalog()
+
+
+@app.post("/api/equipment/register")
+def register_equipment(request: EquipmentRegisterRequest) -> dict:
+    try:
+        return EquipmentLibrary().register_local(Path(request.source_path), request.asset_id, request.name, request.asset_type, request.slot, request.handedness, request.primary_socket, request.secondary_grip, request.tags)
+    except (EquipmentLibraryError, OSError, ValueError) as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
 
 
 @app.post("/api/motions/register")
