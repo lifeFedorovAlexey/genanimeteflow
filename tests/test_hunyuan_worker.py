@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from workers.hunyuan.worker import run
+from workers.hunyuan.texture_worker import run as run_texture
 
 
 class HunyuanWorkerTests(unittest.TestCase):
@@ -33,6 +34,14 @@ class HunyuanWorkerTests(unittest.TestCase):
             image.write_bytes(b"input")
             with patch.dict(os.environ, {"HUNYUAN_ROOT": str(root)}, clear=False):
                 result = run({"images": {"front": str(image), "back": str(root / "missing.png")}, "output_dir": str(root / "out")})
+        self.assertEqual(result["category"], "INPUT_MISSING")
+
+    def test_texture_worker_requires_real_mesh_and_image(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "hunyuan"
+            (root / "hy3dgen" / "texgen").mkdir(parents=True)
+            with patch.dict(os.environ, {"HUNYUAN_ROOT": str(root)}, clear=False):
+                result = run_texture({"mesh_path": str(root / "missing.glb"), "image": str(root / "missing.png"), "output_mesh": str(root / "out.glb")})
         self.assertEqual(result["category"], "INPUT_MISSING")
 
 

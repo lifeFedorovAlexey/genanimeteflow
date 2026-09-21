@@ -271,6 +271,25 @@ class PipelineRunner:
             raise RuntimeError("Geometry must be READY before texture extraction")
         job_dir = self.store.job_dir(manifest.job_id)
         mesh_path = job_dir / mesh_value
+        if manifest.actual_provider == "HunyuanMultiviewProvider":
+            front = manifest.references.get("front")
+            hunyuan = next((item for item in self.models.status() if item["id"] == "hunyuan3d-2mv"), None)
+            if not hunyuan or not hunyuan["installed"]:
+                raise WorkerFailure("MODEL_MISSING", (hunyuan or {}).get("reason", "Hunyuan Paint environment is not ready"))
+            if not front or not front.processed_path:
+                raise RuntimeError("FRONT reference is required for Hunyuan Paint")
+            textured_mesh = job_dir / "textures" / "hunyuan-paint" / "textured.glb"
+            texture_request = {"mesh_path": str(mesh_path), "image": str(job_dir / front.processed_path), "output_mesh": str(textured_mesh), "texture_resolution": 1024, "low_vram_mode": manifest.profile.upper() != "MAX"}
+            logger.info("Starting official Hunyuan Paint worker")
+            result = await asyncio.to_thread(self.process_manager.run_json_worker, [sys.executable, "-m", "workers.hunyuan.texture_worker"], texture_request, REPO_ROOT, {"HUNYUAN_ROOT": str(hunyuan["root"]), "HUNYUAN_PYTHON": str(hunyuan["python"])}, job_dir / "logs" / "textures_paint.log", process_key=f"{manifest.job_id}:{StageName.TEXTURES.value}")
+            painted = Path(result.payload["mesh_path"])
+            paint_report = validate_glb(painted)
+            if not paint_report.valid:
+                raise WorkerFailure("TEXTURE_OUTPUT_INVALID", "; ".join(paint_report.errors))
+            images = await asyncio.to_thread(extract_glb_images, painted, job_dir / "textures" / "source")
+            manifest.stages[StageName.TEXTURES.value].result = {"source_mesh": str(painted.relative_to(job_dir)), "geometry_mesh": mesh_value, "provider": result.payload.get("provider"), "images": [{**item, "path": str(Path(item["path"]).relative_to(job_dir))} for item in images], "material_count": paint_report.material_count, "validation": paint_report.__dict__}
+            logger.info("Hunyuan textured mesh saved: %s", painted)
+            return
         report = validate_glb(mesh_path)
         if not report.valid:
             raise WorkerFailure("GEOMETRY_INVALID", "; ".join(report.errors))
