@@ -12,6 +12,7 @@ from .config import ensure_directories
 from .capabilities import capabilities
 from .hardware import detect_hardware
 from .job_store import JobStore
+from .model_registry import ModelRegistry
 from .runner import PipelineRunner, SingleGpuQueue
 from .schemas import JobCreateRequest, JobManifest, ReferenceSlot, Settings, StageName
 from .storage import atomic_write_json, read_json
@@ -37,6 +38,11 @@ def hardware() -> dict:
 @app.get("/api/capabilities")
 def get_capabilities() -> dict:
     return capabilities()
+
+
+@app.get("/api/models")
+def get_models() -> list[dict]:
+    return ModelRegistry().status()
 
 
 @app.get("/api/settings", response_model=Settings)

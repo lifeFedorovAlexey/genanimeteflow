@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "models": [
+    {
+      "id": "spar3d",
+      "provider": "Spar3DProvider",
+      "repository": "https://github.com/Stability-AI/stable-point-aware-3d",
+      "model_id": "stabilityai/stable-point-aware-3d",
+      "license": "Stability AI model license; review upstream terms before use",
+      "worker_root_env": "SPAR3D_ROOT",
+      "python_env": "SPAR3D_PYTHON",
+      "expected_vram_gb": { "default": 10.5, "low_vram": 7.0 },
+      "official_options": { "low_vram": "--low-vram-mode", "texture_resolution": "--texture-resolution", "remesh": "--remesh_option", "target_count": "--target_count" }
+    },
+    {
+      "id": "hunyuan3d-2mv",
+      "provider": "HunyuanMultiviewProvider",
+      "repository": "https://github.com/Tencent-Hunyuan/Hunyuan3D-2",
+      "model_id": "tencent/Hunyuan3D-2mv",
+      "subfolder": "hunyuan3d-dit-v2-mv",
+      "license": "Tencent Hunyuan 3D 2.0 Community License; territory and commercial terms apply",
+      "worker_root_env": "HUNYUAN_ROOT",
+      "python_env": "HUNYUAN_PYTHON",
+      "expected_vram_gb": { "shape": 6.0, "shape_and_texture": 16.0 },
+      "official_options": { "low_vram": "--low_vram_mode", "model_path": "--model_path", "subfolder": "--subfolder" }
+    },
+    {
+      "id": "unirig",
+      "provider": "UniRigProvider",
+      "repository": "https://github.com/VAST-AI-Research/UniRig",
+      "model_id": "VAST-AI/UniRig",
+      "license": "MIT code license; checkpoint terms must be checked at Hugging Face",
+      "worker_root_env": "UNIRIG_ROOT",
+      "python_env": "UNIRIG_PYTHON",
+      "expected_vram_gb": { "minimum": 8.0 },
+      "official_options": { "skeleton_script": "launch/inference/generate_skeleton.sh", "skin_script": "launch/inference/generate_skin.sh" }
+    }
+  ]
+}

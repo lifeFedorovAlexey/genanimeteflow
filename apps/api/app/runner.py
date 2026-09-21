@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Awaitable, Callable
 
 from .job_store import JobStore
+from .config import REPO_ROOT
+from .model_registry import ModelRegistry
+from .process_manager import ProcessManager, WorkerFailure
 from .reference_pipeline import assess_reference, preprocess_reference
 from .schemas import JobManifest, StageName, StageStatus
 
@@ -27,6 +31,8 @@ class PipelineRunner:
         self.store = store
         self.queue = queue
         self.tasks: dict[tuple[str, str], asyncio.Task[None]] = {}
+        self.models = ModelRegistry()
+        self.process_manager = ProcessManager()
 
     def _logger(self, manifest: JobManifest, stage: str) -> tuple[logging.Logger, Path]:
         log_path = self.store.job_dir(manifest.job_id) / "logs" / f"{stage}.log"
@@ -60,15 +66,22 @@ class PipelineRunner:
             logger.info("Stage started: %s", stage.value)
             if stage is StageName.REFERENCES:
                 await self._references(manifest, logger)
+            elif stage is StageName.GEOMETRY:
+                await self._geometry(manifest, logger, log_path)
             else:
                 raise RuntimeError(f"Stage '{stage.value}' is not available until its required local provider is installed")
             record.status = StageStatus.READY
-            record.result = {"completed": True}
+            record.result = {**record.result, "completed": True}
             logger.info("Stage completed")
         except asyncio.CancelledError:
             record.status = StageStatus.CANCELLED
             logger.warning("Stage cancelled")
             raise
+        except WorkerFailure as exc:
+            record.status = StageStatus.FAILED_OOM if exc.category == "FAILED_OOM" else StageStatus.FAILED
+            record.error_category = exc.category
+            record.error_message = str(exc)
+            logger.error("Worker failed [%s]: %s", exc.category, exc)
         except Exception as exc:
             record.status = StageStatus.FAILED
             record.error_category = "STAGE_ERROR"
@@ -98,3 +111,24 @@ class PipelineRunner:
             if quality["level"] == "ERROR":
                 raise ValueError(f"Invalid {view} reference: {'; '.join(quality['errors'])}")
             logger.info("Saved processed reference: %s", destination)
+
+    async def _geometry(self, manifest: JobManifest, logger: logging.Logger, log_path: Path) -> None:
+        reference_stage = manifest.stages[StageName.REFERENCES.value]
+        if reference_stage.status is not StageStatus.READY:
+            raise RuntimeError("References must be processed successfully before geometry")
+        front = manifest.references.get("front")
+        if not front or not front.processed_path:
+            raise RuntimeError("FRONT reference is required for geometry")
+        spar3d = next(item for item in self.models.status() if item["id"] == "spar3d")
+        if not spar3d["installed"]:
+            raise WorkerFailure("MODEL_MISSING", str(spar3d["reason"]))
+        job_dir = self.store.job_dir(manifest.job_id)
+        output_dir = job_dir / "geometry" / "spar3d"
+        settings = {"texture_resolution": 1024, "low_vram_mode": manifest.profile == "SAFE", "remesh": "none"}
+        request = {"image": str(job_dir / front.processed_path), "output_dir": str(output_dir), "settings": settings}
+        logger.info("Starting official SPAR3D worker")
+        result = await asyncio.to_thread(self.process_manager.run_json_worker, [sys.executable, "-m", "workers.spar3d.worker"], request, REPO_ROOT, {"SPAR3D_ROOT": str(spar3d["root"]), **({"SPAR3D_PYTHON": spar3d["python"]} if spar3d["python"] else {})}, log_path)
+        mesh_path = Path(result.payload["mesh_path"])
+        manifest.actual_provider = result.payload["provider"]
+        manifest.stages[StageName.GEOMETRY.value].result = {"mesh_path": str(mesh_path.relative_to(job_dir)), "settings": settings, "stdout": result.stdout[-4000:]}
+        logger.info("Generated mesh saved: %s", mesh_path)

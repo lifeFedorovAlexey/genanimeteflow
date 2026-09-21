@@ -2,16 +2,30 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import sys
 from pathlib import Path
 
 from PIL import Image, ImageDraw
 
 from app.job_store import JobStore
+from app.model_registry import ModelRegistry
+from app.process_manager import ProcessManager, WorkerFailure
 from app.reference_pipeline import assess_reference, preprocess_reference
 from app.schemas import JobCreateRequest, StageName, StageStatus
 
 
 class FoundationTests(unittest.TestCase):
+    def test_model_registry_reports_uninstalled_workers_without_claiming_availability(self) -> None:
+        statuses = ModelRegistry().status()
+        self.assertTrue(any(item["id"] == "spar3d" for item in statuses))
+        self.assertTrue(all("reason" in item for item in statuses))
+
+    def test_worker_protocol_rejects_non_json_worker_output(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            with self.assertRaises(WorkerFailure) as context:
+                ProcessManager().run_json_worker([sys.executable, "-c", "print('not json')"], {}, Path(temporary), {}, Path(temporary) / "worker.log")
+            self.assertEqual(context.exception.category, "WORKER_PROTOCOL")
+
     def test_job_store_creates_persistent_stage_layout(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             store = JobStore(Path(temporary))
