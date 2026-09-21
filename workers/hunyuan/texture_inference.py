@@ -8,6 +8,19 @@ import time
 from pathlib import Path
 
 
+def _allow_official_local_pipeline_code() -> None:
+    """Allow Tencent's checked-out diffusers custom pipeline with modern diffusers."""
+    from diffusers import DiffusionPipeline
+
+    original = DiffusionPipeline.from_pretrained
+
+    def trusted_from_pretrained(cls, *args, **kwargs):
+        kwargs.setdefault("trust_remote_code", True)
+        return original.__func__(cls, *args, **kwargs)
+
+    DiffusionPipeline.from_pretrained = classmethod(trusted_from_pretrained)
+
+
 def run(request: dict) -> dict:
     official_root = Path(os.environ.get("HUNYUAN_ROOT", ".")).expanduser().resolve()
     if str(official_root) not in sys.path:
@@ -15,6 +28,7 @@ def run(request: dict) -> dict:
     import torch
     import trimesh
     from PIL import Image
+    _allow_official_local_pipeline_code()
     from hy3dgen.texgen import Hunyuan3DPaintPipeline
 
     if not torch.cuda.is_available():
