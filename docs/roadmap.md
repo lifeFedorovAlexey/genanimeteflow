@@ -24,8 +24,8 @@ Each checked item must have working code, automated coverage where practical, a 
 ## Pipeline stages
 
 - [x] Implement SPAR3D provider subprocess protocol and generated-mesh persistence (runtime requires official checkout and weights)
-- [ ] Pin and install a real local single-image geometry worker; expose model download/integrity checks
-- [ ] Implement real textured output and full PBR material validation (embedded extraction is implemented)
+- [x] Pin and install a real local single-image geometry worker; expose model download/integrity checks
+- [x] Implement real textured output and full PBR material validation (embedded extraction is implemented)
 - [x] Implement Blender retopology worker with GLB validation (UV-preserving quad mode remains gated)
 - [x] Implement UniRig worker, canonical mapping and skin-weight validation (runtime requires official checkout and checkpoint)
 - [ ] Implement licensed motion library installation, normalization and catalog validation

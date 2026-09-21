@@ -70,9 +70,20 @@ The official Hunyuan3D-2mv checkpoint is now downloaded to the external model
 store and passed a real CUDA load preflight on the RTX 4070. The official
 single-view Hunyuan3D-2 checkpoint also passed a real CUDA load preflight with
 Torch 2.8/cu128 on the same GPU. The Hunyuan Paint Turbo UNet and remaining
-Delight/image-encoder weights are being staged in the same store; these files
-are intentionally excluded from Git. Paint is not marked ready until its
-official custom pipeline completes a local load and a real textured mesh run.
+Delight/image-encoder weights are staged in the same store; these files are
+intentionally excluded from Git. Paint is now verified by a local load and a
+real textured mesh run; the weights remain excluded from Git.
+
+## First complete local smoke run
+
+Job `c3454980-4591-42b9-af37-ec01d5f92977` ran the official single-view path on
+the user's FRONT reference. Shape generation completed in 94.4 seconds with a
+validated GLB of 407,263 vertices and 814,546 triangles; peak measured VRAM was
+8.67 GiB. Hunyuan Paint then completed in 628.3 seconds and produced a
+validated textured GLB with 814,546 triangles, one material and one embedded
+texture. The output is a smoke-run proof of the local pipeline, not a claim of
+Tripo-level visual equivalence; a controlled multi-view benchmark is still
+required for that claim.
 
 Pixal3D's seven single-view checkpoint files total about 24.05 GB decimal,
 excluding auxiliary models, dependencies and build space. Whole-repository weight
