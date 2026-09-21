@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from dataclasses import asdict
 from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
@@ -9,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 
 from .config import ensure_directories
+from .animation_graph import AnimationGraph, AnimationInput, MotionClip
 from .capabilities import capabilities
 from .equipment_library import EquipmentLibrary, EquipmentLibraryError
 from .hardware import detect_hardware
@@ -17,7 +19,7 @@ from .model_registry import ModelRegistry
 from .motion_library import MotionLibrary, MotionLibraryError
 from .pipeline_graph import STAGE_DEPENDENCIES
 from .runner import PipelineRunner, SingleGpuQueue
-from .schemas import EquipmentRegisterRequest, EquipmentSelectionRequest, ExportSelectionRequest, JobCreateRequest, JobManifest, MotionRegisterRequest, MotionSelectionRequest, ReferenceSlot, Settings, StageName
+from .schemas import AnimationGraphRequest, EquipmentRegisterRequest, EquipmentSelectionRequest, ExportSelectionRequest, JobCreateRequest, JobManifest, MotionRegisterRequest, MotionSelectionRequest, ReferenceSlot, Settings, StageName
 from .storage import atomic_write_json, read_json
 
 ensure_directories()
@@ -105,6 +107,22 @@ def set_motion_selection(job_id: str, request: MotionSelectionRequest) -> JobMan
     manifest.motion_clips = request.clips
     store.save(manifest)
     return manifest
+
+
+@app.post("/api/jobs/{job_id}/animation-graph")
+def evaluate_animation_graph(job_id: str, request: AnimationGraphRequest) -> dict:
+    manifest = get_job(job_id)
+    motions = manifest.stages[StageName.MOTIONS.value]
+    if motions.status.value != "READY":
+        raise HTTPException(status_code=409, detail="Animation graph requires READY normalized motions")
+    clips: list[MotionClip] = []
+    for item in motions.result.get("clips", []):
+        worker = item.get("worker", {})
+        clips.append(MotionClip(id=str(item["clip_id"]), name=str(worker.get("normalized_action") or item["action"]), category=str(item.get("category") or item["action"]), duration=float(item.get("duration") or 1.0), loop=bool(item.get("loop", False)), required_equipment_type=item.get("required_equipment_type")))
+    if not clips:
+        raise HTTPException(status_code=409, detail="Normalized motions contain no clips")
+    output = AnimationGraph(clips).evaluate(AnimationInput(**request.model_dump()))
+    return asdict(output)
 
 
 @app.get("/api/settings", response_model=Settings)

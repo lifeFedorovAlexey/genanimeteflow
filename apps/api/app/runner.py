@@ -346,6 +346,6 @@ class PipelineRunner:
             rig_report = validate_rigged_glb(output_mesh, require_canonical=False)
             if not report.valid or not rig_report.valid:
                 raise WorkerFailure("MOTION_OUTPUT_INVALID", "; ".join(report.errors + rig_report.errors))
-            normalized.append({"clip_id": clip["id"], "source": clip["source_file"], "action": clip["name"], "mesh_path": str(output_mesh.relative_to(job_dir)), "license": clip["license"], "allowed_for_commercial_use": clip["allowed_for_commercial_use"], "worker": result.payload, "validation": {"glb": report.__dict__, "rig": rig_report.__dict__}})
+            normalized.append({"clip_id": clip["id"], "source": clip["source_file"], "action": clip["name"], "category": clip.get("category", clip["name"]), "duration": clip.get("duration"), "loop": clip.get("loop", False), "required_equipment_type": clip.get("requiredEquipmentType"), "mesh_path": str(output_mesh.relative_to(job_dir)), "license": clip["license"], "allowed_for_commercial_use": clip["allowed_for_commercial_use"], "worker": result.payload, "validation": {"glb": report.__dict__, "rig": rig_report.__dict__}})
         manifest.stages[StageName.MOTIONS.value].result = {"clips": normalized, "target_rig": mesh_value}
         logger.info("Normalized %s motion clips", len(normalized))

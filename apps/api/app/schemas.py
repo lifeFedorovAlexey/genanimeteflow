@@ -113,3 +113,15 @@ class EquipmentRegisterRequest(BaseModel):
     primary_socket: str | None = None
     secondary_grip: dict[str, Any] | None = None
     tags: list[str] = Field(default_factory=list)
+
+
+class AnimationGraphRequest(BaseModel):
+    speed: float = 0.0
+    direction_degrees: float = 0.0
+    grounded: bool = True
+    crouched: bool = False
+    sprinting: bool = False
+    equipment_type: str | None = None
+    action: str | None = None
+    action_time: float = 0.0
+    combo_index: int = 0

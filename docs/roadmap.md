@@ -2,6 +2,10 @@
 
 Each checked item must have working code, automated coverage where practical, a real local run, and a small Git commit. An unavailable external model is recorded as a concrete capability constraint; it is never represented as a successful generation.
 
+## Product UX acceptance
+
+- [ ] The interface must be understandable without a manual: each screen makes the next action, current progress, blocking reason and successful result visually obvious. Technical status text is secondary; controls use real user actions instead of generic labels such as `Run`.
+
 ## Foundation
 
 - [x] Repository layout, Python API and React/TypeScript web app
@@ -26,7 +30,7 @@ Each checked item must have working code, automated coverage where practical, a 
 - [ ] Implement licensed motion library installation, normalization and catalog validation
 - [x] Add real Blender canonical-bone retarget worker with bake and GLB roundtrip validation (runtime requires Blender and installed source clips)
 - [x] Connect installed motion clips to job selection, catalog validation and the motions stage
-- [ ] Connect graph evaluation to retargeted Blender actions and playable Unit Tester controls
+- [x] Connect graph evaluation endpoint to normalized Blender actions and Unit Tester state changes (full blend-tree/IK layers remain separate)
 - [ ] Implement retargeting and the canonical animation graph
 - [ ] Implement equipment, clothing, sockets and IK validation
 - [x] Add validated local equipment manifest/catalog registration with license-independent provenance and socket/grip metadata

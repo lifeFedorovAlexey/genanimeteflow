@@ -25,3 +25,7 @@ class AnimationGraphTests(unittest.TestCase):
         self.assertEqual(graph.evaluate(AnimationInput(action="attack", action_time=0.1, equipment_type="sword")).state, "attack_start")
         self.assertEqual(graph.evaluate(AnimationInput(action="attack", action_time=0.3, equipment_type="sword")).state, "attack_active")
         self.assertEqual(graph.evaluate(AnimationInput(action="attack", action_time=0.8, equipment_type="sword")).state, "attack_recovery")
+
+    def test_output_exposes_playable_action_name(self) -> None:
+        output = AnimationGraph(CLIPS).evaluate(AnimationInput(speed=1.0))
+        self.assertEqual(output.action_name, "Walk")

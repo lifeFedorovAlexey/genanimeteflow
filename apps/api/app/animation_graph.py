@@ -35,6 +35,7 @@ class AnimationOutput:
     normalized_time: float
     root_motion: bool
     reason: str
+    action_name: str | None = None
 
 
 class AnimationGraph:
@@ -94,4 +95,4 @@ class AnimationGraph:
         if clip is None:
             return AnimationOutput(state=state, clip_id=None, blend=0.0, normalized_time=0.0, root_motion=False, reason=f"No compatible clip: {reason}")
         normalized_time = (elapsed / clip.duration) % 1.0 if clip.duration > 0 else 0.0
-        return AnimationOutput(state=state, clip_id=clip.id, blend=1.0, normalized_time=normalized_time, root_motion=root_motion, reason=reason)
+        return AnimationOutput(state=state, clip_id=clip.id, blend=1.0, normalized_time=normalized_time, root_motion=root_motion, reason=reason, action_name=clip.name)
