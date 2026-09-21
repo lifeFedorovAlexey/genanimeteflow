@@ -20,10 +20,10 @@ offload may make it possible, but this is an explicit hardware experiment, not a
 guaranteed 12 GB mode. **Hunyuan3D-Omni** is a shape/control model (including pose
 control), not a replacement for texturing, rigging or animation.
 
-The Pixal3D candidate remains useful as a quality comparator. Its official DINOv3
-access check returned HTTP 403 with the saved account on 2026-09-21. Do not
-download its large bundle before that prerequisite is satisfied; do not silently
-substitute an unofficial mirror for a gated official checkpoint.
+The Pixal3D candidate remains useful as a quality comparator. The user has now
+submitted the official DINOv3 gating request and reports that Meta granted access;
+the local token must still be rechecked before downloading its large bundle. Do
+not silently substitute an unofficial mirror for a gated official checkpoint.
 
 ## Actual machine
 
@@ -64,6 +64,11 @@ These pins identify inspected candidates; they do **not** mean installed/working
 - Hunyuan3D-2GP code: `f2456e036a86a4b1d9f58e2379fe7ab0fe9b68b0`.
 - Official Hunyuan3D-2mv weights: `3a761b539b29fe4ff64714813aa9560fd66f5de0`.
 - Official Hunyuan3D-2.1 model card was inspected; its published memory figures are recorded above.
+
+The official Hunyuan3D-2mv checkpoint is now downloaded to the external model
+store and passed a real CUDA load preflight on the RTX 4070. The Hunyuan Paint
+Turbo UNet and remaining Delight/image-encoder weights are being staged in the
+same store; these files are intentionally excluded from Git.
 
 Pixal3D's seven single-view checkpoint files total about 24.05 GB decimal,
 excluding auxiliary models, dependencies and build space. Whole-repository weight

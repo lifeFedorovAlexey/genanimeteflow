@@ -28,7 +28,7 @@ def capabilities() -> dict:
         "stages": {
             "references": {"available": True, "description": "Validate, crop, alpha-process, normalize and persist reference images"},
             "geometry": {"available": spar3d["installed"] or hunyuan["installed"], "reason": None if spar3d["installed"] or hunyuan["installed"] else f"SPAR3D: {spar3d['reason']}; Hunyuan3D-2mv: {hunyuan['reason']}"},
-            "textures": {"available": True, "reason": "Runs after a generated mesh and extracts only real embedded textures"},
+            "textures": {"available": True, "reason": "Runs Hunyuan Paint on Hunyuan meshes; otherwise preserves and validates provider textures"},
             "retopology": {"available": bool(blender), "description": "Blender GLB import, triangle decimation and export" if blender else None, "reason": None if blender else "Blender is not installed"},
             "rig": {"available": unirig_ready, "reason": None if unirig_ready else "Configure UNIRIG_ROOT with the official UniRig inference scripts and checkpoint"},
             "motions": {"available": bool(blender and motion_clips), "description": "Blender canonical-bone retarget and bake" if blender and motion_clips else None, "reason": None if blender and motion_clips else "Install and register at least one validated motion library" if blender else "Blender is not installed"},
