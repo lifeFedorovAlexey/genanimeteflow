@@ -7,16 +7,23 @@ deformations are not inferior to the user's Tripo + Mixamo comparison. Passing
 mesh validation alone does not establish that quality. No percentage-equivalence
 claim is currently supported. No new candidate has yet generated this character locally.
 
-First fidelity candidate: **Pixal3D**, using its native low-VRAM path and unchanged
-weights before experimenting with quantization. Actual access check to official
-Meta DINOv3 config returned HTTP 403 with the saved account on 2026-09-21. Do not
-download the large Pixal3D bundle before this prerequisite is satisfied; do not
-silently substitute an unofficial mirror for a gated official checkpoint.
+The first Tencent candidate is **Hunyuan3D-2mv + Paint**, with audited CPU
+offloading. It directly addresses the original spec's multiview path: the official
+pipeline accepts named FRONT/LEFT/BACK images and produces one mesh. Do not default
+to mini/turbo merely because they are easier to run. Provider selection remains
+provisional until same-input comparisons exist.
 
-While that access is pending, evaluate **Hunyuan3D-2mv + Paint**, with audited CPU
-offloading. This also addresses the original spec's unimplemented multiview path.
-Do not default to mini/turbo merely because they are easier to run. Provider
-selection remains provisional until same-input comparisons exist.
+The higher-fidelity **Hunyuan3D-2.1** shape/PBR pair is an experimental MAX path.
+Tencent's model card reports roughly 10 GB for shape, 21 GB for texture and 29 GB
+for both, so the RTX 4070 cannot run the full pair concurrently. Sequential CPU
+offload may make it possible, but this is an explicit hardware experiment, not a
+guaranteed 12 GB mode. **Hunyuan3D-Omni** is a shape/control model (including pose
+control), not a replacement for texturing, rigging or animation.
+
+The Pixal3D candidate remains useful as a quality comparator. Its official DINOv3
+access check returned HTTP 403 with the saved account on 2026-09-21. Do not
+download its large bundle before that prerequisite is satisfied; do not silently
+substitute an unofficial mirror for a gated official checkpoint.
 
 ## Actual machine
 
@@ -34,6 +41,9 @@ be rechecked before installation, including actual Windows capacity behind WSL.
 | [Pixal3D](https://github.com/TencentARC/Pixal3D) | Pixel-aligned conditioning, geometry and PBR; native on-demand loading | Author CLI estimates ~10–12 GB in low-VRAM mode, not a measured bound on this PC. CUDA extensions and auxiliary weights required. Multiview uses separate weights and camera transforms, not arbitrary labels. |
 | [TRELLIS.2](https://github.com/microsoft/TRELLIS.2) | Detailed shape and spatial PBR output | Upstream advertises 24 GB; [community implementation](https://github.com/visualbruno/ComfyUI-Trellis2) offers memory optimizations. Need verify 12 GB execution and any quantization loss; also uses DINOv3. |
 | [Hunyuan3D-2](https://github.com/Tencent-Hunyuan/Hunyuan3D-2) | Official multiview shape plus separate texture pipeline | [2GP](https://github.com/deepbeepmeep/Hunyuan3D-2GP) provides offload profiles targeting 9/6 GB. Those are author targets, not local results; audit source and test full mv rather than mini. |
+| [Hunyuan3D-2.1](https://huggingface.co/tencent/Hunyuan3D-2.1) | Tencent's newer higher-fidelity shape and PBR pair; strongest Tencent quality candidate | Tencent reports ~10 GB shape / ~21 GB texture / ~29 GB together. Shape may fit with reserve; Paint needs sequential offload or a downgrade. No local result yet. |
+| [Hunyuan3D-Omni](https://huggingface.co/tencent/Hunyuan3D-Omni) | Shape generation with pose, point, voxel and bounding-box controls; useful for controlled humanoid shape | 3.3B shape model, Tencent reports ~10 GB generation. It is not a textured or rigged output and has no multiview image interface documented as the primary path. |
+| [Hunyuan3D-Part](https://huggingface.co/tencent/Hunyuan3D-Part) | Part segmentation/decomposition after generation; useful for clothing/equipment separation | It is downstream of a mesh and the released X-Part is a light version; not the geometry generator itself. |
 | [TripoSG](https://github.com/VAST-AI-Research/TripoSG) | Official image-to-shape candidate advertising 8 GB minimum | Not the commercial Tripo service and not a complete textured character pipeline; separate texturing still required. |
 | [UniRig](https://github.com/VAST-AI-Research/UniRig) | Required by original spec: general skeleton and skinning | Must measure humanoid mapping and deformation quality; broader object support does not prove superiority to Mixamo. |
 | [Make-It-Animatable](https://github.com/jasongzy/Make-It-Animatable) | Humanoid-specific rigging comparator; published official inference and weights | Evaluate skeleton, fingers and skinning on generated mesh. No local VRAM/time or quality result yet; don't use training hardware requirements as inference requirements. |
@@ -52,6 +62,8 @@ These pins identify inspected candidates; they do **not** mean installed/working
 - TRELLIS.2 code: `75fbf0183001ed9876c8dbb35de6b68552ee08bd`.
 - TripoSG code: `fc5c40990181e2a756c4e0b1c2f4d6b5202faf8c`.
 - Hunyuan3D-2GP code: `f2456e036a86a4b1d9f58e2379fe7ab0fe9b68b0`.
+- Official Hunyuan3D-2mv weights: `3a761b539b29fe4ff64714813aa9560fd66f5de0`.
+- Official Hunyuan3D-2.1 model card was inspected; its published memory figures are recorded above.
 
 Pixal3D's seven single-view checkpoint files total about 24.05 GB decimal,
 excluding auxiliary models, dependencies and build space. Whole-repository weight
