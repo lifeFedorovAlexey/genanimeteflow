@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { Grid, OrbitControls, useAnimations, useGLTF } from "@react-three/drei";
+import { Bounds, Center, Grid, OrbitControls, useAnimations, useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 import { api } from "./api";
 
 type TesterStatus = { state: string; clip: string; speed: number; time: number; rootMotion: boolean; direction_degrees: number; grounded: boolean; crouched: boolean; sprinting: boolean };
+type RenderMode = "material" | "albedo" | "clay";
 
 function chooseState(keys: Set<string>): { state: string; speed: number } {
   if (keys.has(" ")) return { state: "jump", speed: 1 };
@@ -20,7 +21,7 @@ function findAction(names: string[], state: string, requested: string): string {
   return match ?? names[0] ?? "";
 }
 
-function AnimatedAsset({ url, selectedClip, graphClip, wireframe, skeleton, onActions, onStatus }: { url: string; selectedClip: string; graphClip: string; wireframe: boolean; skeleton: boolean; onActions: (names: string[]) => void; onStatus: (status: TesterStatus) => void }) {
+function AnimatedAsset({ url, selectedClip, graphClip, wireframe, skeleton, renderMode, onActions, onStatus }: { url: string; selectedClip: string; graphClip: string; wireframe: boolean; skeleton: boolean; renderMode: RenderMode; onActions: (names: string[]) => void; onStatus: (status: TesterStatus) => void }) {
   const root = useRef<THREE.Group>(null);
   const keys = useRef(new Set<string>());
   const activeClip = useRef("");
@@ -38,12 +39,35 @@ function AnimatedAsset({ url, selectedClip, graphClip, wireframe, skeleton, onAc
     return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); };
   }, []);
   useEffect(() => {
+    const originals: Array<{ mesh: THREE.Mesh; material: THREE.Material | THREE.Material[] }> = [];
+    const diagnostics: THREE.Material[] = [];
     asset.scene.traverse(object => {
       if (!(object as THREE.Mesh).isMesh) return;
-      const material = (object as THREE.Mesh).material;
-      for (const item of Array.isArray(material) ? material : [material]) if (item && "wireframe" in item) item.wireframe = wireframe;
+      const mesh = object as THREE.Mesh;
+      originals.push({ mesh, material: mesh.material });
+      const convert = (source: THREE.Material) => {
+        const pbr = source as THREE.MeshStandardMaterial;
+        const material = renderMode === "albedo"
+          ? new THREE.MeshBasicMaterial({ map: pbr.map, color: pbr.color, toneMapped: false })
+          : renderMode === "clay"
+            ? new THREE.MeshStandardMaterial({ color: "#a0a0a0", roughness: 0.85, metalness: 0 })
+            : source.clone();
+        material.side = source.side;
+        material.transparent = source.transparent;
+        material.opacity = source.opacity;
+        material.alphaTest = source.alphaTest;
+        if ("alphaMap" in material) material.alphaMap = pbr.alphaMap;
+        if ("wireframe" in material) material.wireframe = wireframe;
+        diagnostics.push(material);
+        return material;
+      };
+      mesh.material = Array.isArray(mesh.material) ? mesh.material.map(convert) : convert(mesh.material);
     });
-  }, [asset.scene, wireframe]);
+    return () => {
+      for (const { mesh, material } of originals) mesh.material = material;
+      for (const material of diagnostics) material.dispose();
+    };
+  }, [asset.scene, wireframe, renderMode]);
   useFrame((_, delta) => {
     const selected = chooseState(keys.current);
     const clip = findAction(actionNames, selected.state, selectedClip || graphClip);
@@ -69,9 +93,10 @@ export default function Viewport({ assetUrl, jobId, graphEnabled }: { assetUrl?:
   const [selectedClip, setSelectedClip] = useState("");
   const [wireframe, setWireframe] = useState(false);
   const [skeleton, setSkeleton] = useState(false);
+  const [renderMode, setRenderMode] = useState<RenderMode>("material");
   const [status, setStatus] = useState<TesterStatus>({ state: "idle", clip: "", speed: 1, time: 0, rootMotion: false, direction_degrees: 0, grounded: true, crouched: false, sprinting: false });
   const [graphClip, setGraphClip] = useState("");
   const handleActions = useCallback((names: string[]) => { setActions(names); setSelectedClip(current => current && names.includes(current) ? current : ""); }, []);
   const handleStatus = useCallback((next: TesterStatus) => { setStatus(next); if (jobId && graphEnabled) void api.evaluateAnimationGraph(jobId, { speed: next.speed, direction_degrees: next.direction_degrees, grounded: next.grounded, crouched: next.crouched, sprinting: next.sprinting, equipment_type: null, action: null, action_time: next.time, combo_index: 0 }).then(result => setGraphClip(result.action_name ?? "")).catch(() => setGraphClip("")); }, [graphEnabled, jobId]);
-  return <div className="viewport-shell"><div className="viewport"><Canvas camera={{ position: [3, 2.2, 4], fov: 42 }}><color attach="background" args={["#0c0e12"]} /><ambientLight intensity={1.2} /><directionalLight position={[3, 5, 2]} intensity={2} /><Grid args={[10, 10]} cellColor="#29303a" sectionColor="#4a5666" fadeDistance={12} />{assetUrl && <AnimatedAsset url={assetUrl} selectedClip={selectedClip} graphClip={graphClip} wireframe={wireframe} skeleton={skeleton} onActions={handleActions} onStatus={handleStatus} />}<OrbitControls makeDefault /></Canvas><div className={`viewport-empty ${assetUrl ? "has-asset" : ""}`}><span>{assetUrl ? "Validated asset" : "Unit Tester"}</span><small>{assetUrl ? "WASD move · Shift sprint · Ctrl crouch · Space jump" : "Validated GLB assets will appear here"}</small></div></div>{assetUrl && <div className="tester-toolbar"><label>Clip<select value={selectedClip} onChange={event => setSelectedClip(event.target.value)} disabled={!actions.length}><option value="">Graph / auto state</option>{actions.map(name => <option key={name} value={name}>{name}</option>)}</select></label><label className="debug-toggle"><input type="checkbox" checked={wireframe} onChange={event => setWireframe(event.target.checked)} /> Wireframe</label><label className="debug-toggle"><input type="checkbox" checked={skeleton} onChange={event => setSkeleton(event.target.checked)} /> Skeleton</label><div className="tester-stats"><span>{status.state}</span><span>{status.clip || "no clip"}</span><span>{status.speed.toFixed(1)}×</span><span>{status.rootMotion ? "root motion" : graphEnabled ? "graph" : "in-place"}</span></div></div>}</div>;
+  return <div className="viewport-shell"><div className="viewport"><Canvas camera={{ position: [0, 0.8, -3], fov: 42 }}><color attach="background" args={["#0c0e12"]} /><ambientLight intensity={1.2} /><directionalLight position={[3, 5, 2]} intensity={2} /><Grid args={[10, 10]} cellColor="#29303a" sectionColor="#4a5666" fadeDistance={12} />{assetUrl && <Bounds key={assetUrl} fit clip observe margin={1.3}><Center top><AnimatedAsset key={assetUrl} url={assetUrl} renderMode={renderMode} selectedClip={selectedClip} graphClip={graphClip} wireframe={wireframe} skeleton={skeleton} onActions={handleActions} onStatus={handleStatus} /></Center></Bounds>}<OrbitControls makeDefault /></Canvas><div className={`viewport-empty ${assetUrl ? "has-asset" : ""}`}><span>{assetUrl ? "Validated asset" : "Unit Tester"}</span><small>{assetUrl ? "WASD move · Shift sprint · Ctrl crouch · Space jump" : "Validated GLB assets will appear here"}</small></div></div>{assetUrl && <div className="tester-toolbar"><label>View<select aria-label="Render mode" value={renderMode} onChange={event => setRenderMode(event.target.value as RenderMode)}><option value="material">Materials</option><option value="albedo">Base color</option><option value="clay">Geometry</option></select></label><label>Clip<select value={selectedClip} onChange={event => setSelectedClip(event.target.value)} disabled={!actions.length}><option value="">Graph / auto state</option>{actions.map(name => <option key={name} value={name}>{name}</option>)}</select></label><label className="debug-toggle"><input type="checkbox" checked={wireframe} onChange={event => setWireframe(event.target.checked)} /> Wireframe</label><label className="debug-toggle"><input type="checkbox" checked={skeleton} onChange={event => setSkeleton(event.target.checked)} /> Skeleton</label><div className="tester-stats"><span>{status.state}</span><span>{status.clip || "no clip"}</span><span>{status.speed.toFixed(1)}×</span><span>{status.rootMotion ? "root motion" : graphEnabled ? "graph" : "in-place"}</span></div></div>}</div>;
 }

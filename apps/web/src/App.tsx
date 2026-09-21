@@ -94,9 +94,13 @@ function App() {
   const activeStage = active?.stages.references;
   const gpu = hardware?.gpu.gpus[0];
   const readyViews = useMemo(() => Object.values(active?.references ?? {}).filter(slot => slot.quality?.level !== "ERROR").length, [active]);
-  const assetStage = ["equipment", "rig", "retopology", "geometry"].map(stage => active?.stages[stage]).find(stage => stage?.status === "READY");
-  const assetPath = typeof assetStage?.result.mesh_path === "string" ? assetStage.result.mesh_path : undefined;
-  const assetUrl = active && assetPath ? `/api/jobs/${active.job_id}/files/${assetPath.split("/").map(encodeURIComponent).join("/")}` : undefined;
+  const assetStage = ["equipment", "rig", "textures", "retopology", "geometry"].map(stage => active?.stages[stage]).find(stage => stage?.status === "READY");
+  const assetPath = typeof assetStage?.result.mesh_path === "string"
+    ? assetStage.result.mesh_path
+    : typeof assetStage?.result.source_mesh === "string" ? assetStage.result.source_mesh : undefined;
+  // useGLTF caches by URL. A completed rerun must load the new GLB, while
+  // unrelated polling/other stage changes must not reset the viewport.
+  const assetUrl = active && assetPath ? `/api/jobs/${active.job_id}/files/${assetPath.replace(/\\/g, "/").split("/").map(encodeURIComponent).join("/")}?v=${encodeURIComponent(assetStage?.finished_at ?? "legacy")}` : undefined;
   const next = active ? nextStep(active, capabilities) : undefined;
 
   return <div className="app-shell">

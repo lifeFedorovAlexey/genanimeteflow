@@ -13,12 +13,37 @@ def _point_camera(camera: bpy.types.Object, target: Vector) -> None:
     camera.rotation_euler = (target - camera.location).to_track_quat("-Z", "Y").to_euler()
 
 
-def render_preview(source: Path, output: Path, size: int = 768) -> None:
+def render_preview(source: Path, output: Path, size: int = 768, mode: str = "material", view: str = "front") -> None:
     bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.ops.import_scene.gltf(filepath=str(source))
     meshes = [item for item in bpy.context.scene.objects if item.type == "MESH"]
     if not meshes:
         raise RuntimeError("GLB contains no mesh objects")
+
+    # Diagnostic materials live only in this render scene. Never modify/export
+    # the source asset. Albedo isolates texture detail from lighting and normals;
+    # clay isolates geometry from the texture painted over it.
+    if mode != "material":
+        for material in bpy.data.materials:
+            if not material.use_nodes:
+                continue
+            nodes = material.node_tree.nodes
+            principled = next((node for node in nodes if node.type == "BSDF_PRINCIPLED"), None)
+            output_node = next((node for node in nodes if node.type == "OUTPUT_MATERIAL" and node.is_active_output), None)
+            if principled is None or output_node is None:
+                raise RuntimeError(f"Cannot inspect material {material.name}: no Principled/output node")
+            if mode == "albedo":
+                emission = nodes.new("ShaderNodeEmission")
+                color = principled.inputs["Base Color"]
+                emission.inputs["Color"].default_value = color.default_value
+                if color.is_linked:
+                    material.node_tree.links.new(color.links[0].from_socket, emission.inputs["Color"])
+                material.node_tree.links.new(emission.outputs[0], output_node.inputs["Surface"])
+            else:
+                clay = nodes.new("ShaderNodeBsdfPrincipled")
+                clay.inputs["Base Color"].default_value = (0.4, 0.4, 0.4, 1)
+                clay.inputs["Roughness"].default_value = 0.85
+                material.node_tree.links.new(clay.outputs[0], output_node.inputs["Surface"])
 
     corners = [item.matrix_world @ Vector(corner) for item in meshes for corner in item.bound_box]
     lower = Vector((min(item.x for item in corners), min(item.y for item in corners), min(item.z for item in corners)))
@@ -31,7 +56,8 @@ def render_preview(source: Path, output: Path, size: int = 768) -> None:
     bpy.context.collection.objects.link(camera)
     # SPAR3D's exported coordinate system presents the reference-facing side
     # from +Y.  Keep the preview aligned with the source image by default.
-    camera.location = center + Vector((0, extent * 2.6, extent * 0.12))
+    angle = {"front": 0, "side": math.pi / 2, "back": math.pi}[view]
+    camera.location = center + Vector((math.sin(angle) * extent * 2.6, math.cos(angle) * extent * 2.6, extent * 0.12))
     camera_data.lens = 58
     camera_data.sensor_width = 36
     _point_camera(camera, center)
@@ -70,6 +96,11 @@ def render_preview(source: Path, output: Path, size: int = 768) -> None:
     scene.render.film_transparent = False
     scene.view_settings.look = "AgX - Medium High Contrast"
     scene.view_settings.exposure = -0.75
+    if mode == "albedo":
+        scene.view_settings.view_transform = "Standard"
+        scene.view_settings.look = "None"
+        scene.view_settings.exposure = 0
+        scene.view_settings.gamma = 1
     output.parent.mkdir(parents=True, exist_ok=True)
     bpy.ops.render.render(write_still=True)
 
@@ -79,12 +110,14 @@ def main() -> None:
     parser.add_argument("source", type=Path)
     parser.add_argument("output", type=Path)
     parser.add_argument("--size", type=int, default=768)
+    parser.add_argument("--mode", choices=("material", "albedo", "clay"), default="material")
+    parser.add_argument("--view", choices=("front", "side", "back"), default="front")
     # Blender keeps its own CLI arguments in sys.argv alongside the arguments
     # intended for this script.  Only parse the portion after the `--`
     # separator, otherwise argparse mistakes `-b`/`-P` for our options.
     script_args = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else sys.argv[1:]
     args = parser.parse_args(script_args)
-    render_preview(args.source.resolve(), args.output.resolve(), args.size)
+    render_preview(args.source.resolve(), args.output.resolve(), args.size, args.mode, args.view)
 
 
 if __name__ == "__main__":

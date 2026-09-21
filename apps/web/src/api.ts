@@ -1,7 +1,7 @@
 export type StageStatus = "PENDING" | "RUNNING" | "READY" | "FAILED" | "FAILED_OOM" | "INVALIDATED" | "CANCELLED";
 export type ViewName = "front" | "left" | "back" | "right";
 export interface ReferenceSlot { view: ViewName; required: boolean; original_path?: string; processed_path?: string; quality?: { level: "GOOD" | "WARNING" | "ERROR"; warnings: string[]; errors: string[]; foreground_ratio: number; [key: string]: unknown }; }
-export interface StageRecord { name: string; status: StageStatus; error_category?: string; error_message?: string; result: Record<string, unknown>; }
+export interface StageRecord { name: string; status: StageStatus; finished_at?: string | null; error_category?: string; error_message?: string; result: Record<string, unknown>; }
 export interface Job { job_id: string; status: string; profile: string; resolution: number; references: Record<string, ReferenceSlot>; stages: Record<string, StageRecord>; equipment_assets: string[]; motion_clips: string[]; export_actions: string[]; warnings: string[]; updated_at: string; }
 export interface Hardware { os: Record<string, unknown>; cpu: Record<string, unknown>; ram: { total_gb: number }; gpu: { available: boolean; gpus: Array<{ name: string; vram_mb: number; driver: string; compute_capability: string }>; }; cuda: Record<string, unknown>; blender: { available: boolean; path?: string }; recommendation: string; disk: { free_gb: number }; }
 export interface Capabilities { providers: Record<string, { available: boolean; reason?: string }>; stages: Record<string, { available: boolean; description?: string; reason?: string }>; }
