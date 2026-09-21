@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import shutil
 import sys
 from datetime import UTC, datetime
@@ -89,6 +90,8 @@ class PipelineRunner:
                 await self._textures(manifest, logger)
             elif stage is StageName.RETOPOLOGY:
                 await self._retopology(manifest, logger, log_path)
+            elif stage is StageName.RIG:
+                await self._rig(manifest, logger, log_path)
             else:
                 raise RuntimeError(f"Stage '{stage.value}' is not available until its required local provider is installed")
             record.status = StageStatus.READY
@@ -222,3 +225,24 @@ class PipelineRunner:
             raise WorkerFailure("RETOPOLOGY_OUTPUT_INVALID", "; ".join(report.errors))
         manifest.stages[StageName.RETOPOLOGY.value].result = {"mode": result.payload.get("mode"), "source_mesh": mesh_value, "mesh_path": str(output_mesh.relative_to(job_dir)), "target_faces": request["target_faces"], "validation": report.__dict__}
         logger.info("Retopology output saved: %s", output_mesh)
+
+    async def _rig(self, manifest: JobManifest, logger: logging.Logger, log_path: Path) -> None:
+        retopo = manifest.stages[StageName.RETOPOLOGY.value]
+        mesh_value = retopo.result.get("mesh_path")
+        if retopo.status is not StageStatus.READY or not isinstance(mesh_value, str):
+            raise RuntimeError("Retopology must be READY before rigging")
+        job_dir = self.store.job_dir(manifest.job_id)
+        source_mesh = job_dir / mesh_value
+        output_dir = job_dir / "rig"
+        request = {"source_mesh": str(source_mesh), "output_dir": str(output_dir)}
+        unirig_root = os.getenv("UNIRIG_ROOT")
+        env = {"UNIRIG_ROOT": unirig_root} if unirig_root else {}
+        logger.info("Starting official UniRig worker")
+        result = await asyncio.to_thread(self.process_manager.run_json_worker, [sys.executable, "-m", "workers.unirig.worker"], request, REPO_ROOT, env, log_path)
+        rigged_mesh = Path(result.payload["rigged_mesh"])
+        from tools.validation.rig import validate_rigged_glb
+        report = validate_rigged_glb(rigged_mesh, require_canonical=False)
+        if not report.valid:
+            raise WorkerFailure("RIG_VALIDATION_FAILED", "; ".join(report.errors))
+        manifest.stages[StageName.RIG.value].result = {"provider": result.payload["provider"], "source_mesh": mesh_value, "mesh_path": str(rigged_mesh.relative_to(job_dir)), "skeleton": str(Path(result.payload["skeleton"]).relative_to(job_dir)), "skin": str(Path(result.payload["skin"]).relative_to(job_dir)), "validation": report.__dict__}
+        logger.info("Rigged GLB saved: %s", rigged_mesh)

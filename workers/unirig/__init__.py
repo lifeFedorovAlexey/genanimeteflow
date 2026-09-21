@@ -1,0 +1,1 @@
+"""UniRig official inference worker."""

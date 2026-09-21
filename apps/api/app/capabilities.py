@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import shutil
+import os
+from pathlib import Path
 
 from .model_registry import ModelRegistry
 
@@ -9,6 +11,8 @@ def capabilities() -> dict:
     blender = shutil.which("blender")
     models = ModelRegistry().status()
     spar3d = next(item for item in models if item["id"] == "spar3d")
+    unirig_root = os.getenv("UNIRIG_ROOT")
+    unirig_ready = bool(unirig_root and all((Path(unirig_root) / relative).is_file() for relative in ("launch/inference/generate_skeleton.sh", "launch/inference/generate_skin.sh", "launch/inference/merge.sh")))
     return {
         "providers": {
             "AUTO": {"available": spar3d["installed"], "reason": None if spar3d["installed"] else spar3d["reason"]},
@@ -20,7 +24,7 @@ def capabilities() -> dict:
             "geometry": {"available": spar3d["installed"], "reason": None if spar3d["installed"] else spar3d["reason"]},
             "textures": {"available": True, "reason": "Runs after a generated mesh and extracts only real embedded textures"},
             "retopology": {"available": bool(blender), "description": "Blender GLB import, triangle decimation and export" if blender else None, "reason": None if blender else "Blender is not installed"},
-            "rig": {"available": False, "reason": "UniRig worker and model weights are not installed"},
+            "rig": {"available": unirig_ready, "reason": None if unirig_ready else "Configure UNIRIG_ROOT with the official UniRig inference scripts and checkpoint"},
             "motions": {"available": False, "reason": "Motion library has not been installed"},
             "export": {"available": False, "reason": "Requires a validated rigged asset"},
         },
