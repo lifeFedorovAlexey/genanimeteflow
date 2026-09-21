@@ -27,7 +27,7 @@ Each checked item must have working code, automated coverage where practical, a 
 - [x] Pin and install a real local single-image geometry worker; expose model download/integrity checks
 - [x] Implement real textured output and full PBR material validation (embedded extraction is implemented)
 - [x] Implement Blender retopology worker with GLB validation (UV-preserving quad mode remains gated)
-- [x] Implement UniRig worker, canonical mapping and skin-weight validation (runtime requires official checkout and checkpoint)
+- [x] Implement UniRig worker bridge, official skeleton/skin inference and skin-weight validation (runtime requires official checkout, checkpoint and WSL CUDA)
 - [ ] Implement licensed motion library installation, normalization and catalog validation
 - [x] Add real Blender canonical-bone retarget worker with bake and GLB roundtrip validation (runtime requires Blender and installed source clips)
 - [x] Connect installed motion clips to job selection, catalog validation and the motions stage

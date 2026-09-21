@@ -14,9 +14,18 @@ def _wsl_path(path: Path) -> str:
     return f"/mnt/{drive}{path.as_posix()[2:]}"
 
 
-def _run(command: list[str], cwd: Path) -> tuple[int, str, str]:
-    completed = subprocess.run(command, cwd=cwd, capture_output=True, text=True, check=False)
+def _run(command: list[str], cwd: Path, environment: dict[str, str] | None = None) -> tuple[int, str, str]:
+    completed = subprocess.run(command, cwd=cwd, env=environment, capture_output=True, text=True, check=False)
     return completed.returncode, completed.stdout, completed.stderr
+
+
+def _wsl_command(shell: str, distro: str, python_bin: str, unirig_root: Path, repo_root: Path, compat_root: Path, line: str) -> list[str]:
+    setup = (
+        f"export PYTHONPATH={shlex.quote(_wsl_path(repo_root))}:{shlex.quote(_wsl_path(compat_root))}:{shlex.quote(_wsl_path(unirig_root))}:$PYTHONPATH; "
+        "export HF_HOME=/mnt/d/models/hf-cache; "
+        f"cd {shlex.quote(_wsl_path(unirig_root))} && {line}"
+    )
+    return [shell, "-d", distro, "--", "bash", "-lc", setup]
 
 
 def run(request: dict) -> dict:
@@ -24,57 +33,107 @@ def run(request: dict) -> dict:
     if not root_value:
         return {"ok": False, "category": "MODEL_MISSING", "error": "UNIRIG_ROOT is not configured"}
     root = Path(root_value).expanduser().resolve()
-    skeleton_script = root / "launch" / "inference" / "generate_skeleton.sh"
-    skin_script = root / "launch" / "inference" / "generate_skin.sh"
-    merge_script = root / "launch" / "inference" / "merge.sh"
-    missing = [str(path) for path in (skeleton_script, skin_script, merge_script) if not path.is_file()]
-    if missing:
-        return {"ok": False, "category": "MODEL_MISSING", "error": "UniRig official inference scripts are missing: " + ", ".join(missing)}
+    if not (root / "run.py").is_file():
+        return {"ok": False, "category": "MODEL_MISSING", "error": f"UniRig checkout is incomplete: {root}"}
+
     shell = os.getenv("UNIRIG_BASH") or shutil.which("bash")
     if not shell:
-        return {"ok": False, "category": "WSL_OR_BASH_MISSING", "error": "Configure UNIRIG_BASH or install a bash/WSL runtime for UniRig"}
+        return {"ok": False, "category": "WSL_OR_BASH_MISSING", "error": "Configure UNIRIG_BASH or install WSL for UniRig"}
     source = Path(str(request.get("source_mesh", ""))).expanduser().resolve()
     output_dir = Path(str(request.get("output_dir", ""))).expanduser().resolve()
     if not source.is_file():
         return {"ok": False, "category": "INPUT_MISSING", "error": f"Rig source mesh was not found: {source}"}
     output_dir.mkdir(parents=True, exist_ok=True)
-    skeleton = output_dir / "skeleton.fbx"
-    skin = output_dir / "skin.fbx"
-    rigged = output_dir / "rigged.glb"
+
     is_wsl = Path(shell).name.lower() in {"wsl", "wsl.exe"}
-    if is_wsl:
-        distro = os.getenv("UNIRIG_DISTRO", "Ubuntu")
-        python_bin = os.getenv("UNIRIG_WSL_PYTHON", "/opt/unirig-venv/bin/python")
-        compat_root = _wsl_path(Path(__file__).resolve().parent / "compat")
+    if not is_wsl:
+        return {"ok": False, "category": "WSL_OR_BASH_MISSING", "error": "UniRig currently requires the configured WSL CUDA runtime on Windows"}
+    blender = os.getenv("BLENDER_PATH")
+    if not blender or not Path(blender).is_file():
+        return {"ok": False, "category": "BLENDER_MISSING", "error": "Blender is required to extract and merge the UniRig prediction"}
 
-        def command(script: Path, args: list[tuple[str, Path]]) -> list[str]:
-            script_text = shlex.quote(_wsl_path(script))
-            arguments = " ".join(f"{shlex.quote(flag)} {shlex.quote(_wsl_path(value))}" for flag, value in args)
-            shell_line = f"export PATH={shlex.quote(str(Path(python_bin).parent))}:$PATH; export PYTHONPATH={shlex.quote(compat_root)}:$PYTHONPATH; cd {shlex.quote(_wsl_path(root))} && bash {script_text} {arguments}"
-            return [shell, "-d", distro, "--", "bash", "-lc", shell_line]
-
-        commands = [
-            command(skeleton_script, [("--input", source), ("--output", skeleton)]),
-            command(skin_script, [("--input", skeleton), ("--output", skin)]),
-            command(merge_script, [("--source", skin), ("--target", source), ("--output", rigged)]),
-        ]
-    else:
-        commands = [
-            [shell, str(skeleton_script), "--input", str(source), "--output", str(skeleton)],
-            [shell, str(skin_script), "--input", str(skeleton), "--output", str(skin)],
-            [shell, str(merge_script), "--source", str(skin), "--target", str(source), "--output", str(rigged)],
-        ]
+    distro = os.getenv("UNIRIG_DISTRO", "Ubuntu")
+    python_bin = os.getenv("UNIRIG_WSL_PYTHON", "/opt/unirig-venv/bin/python")
+    repo_root = Path(__file__).resolve().parents[2]
+    compat_root = Path(__file__).resolve().parent / "compat"
+    prediction_root = output_dir / "unirig" / source.stem
+    prediction_root.mkdir(parents=True, exist_ok=True)
+    raw_data = prediction_root / "raw_data.npz"
+    skeleton_prediction = prediction_root / "predict_skeleton.npz"
+    skin_prediction = prediction_root / "predict_skin.npz"
+    rigged = output_dir / "rigged.glb"
     logs: list[dict] = []
-    for command in commands:
-        return_code, stdout, stderr = _run(command, root)
-        logs.append({"command": command, "return_code": return_code, "stdout": stdout, "stderr": stderr})
-        if return_code != 0:
-            combined = stdout + "\n" + stderr
-            category = "FAILED_OOM" if "out of memory" in combined.lower() else "UNIRIG_ERROR"
-            return {"ok": False, "category": category, "error": f"UniRig command failed with code {return_code}", "logs": logs}
+
+    def execute(label: str, command: list[str], cwd: Path, env: dict[str, str] | None = None) -> bool:
+        return_code, stdout, stderr = _run(command, cwd, env)
+        logs.append({"stage": label, "command": command, "return_code": return_code, "stdout": stdout[-12000:], "stderr": stderr[-12000:]})
+        return return_code == 0
+
+    extract_script = repo_root / "workers" / "unirig" / "blender_extract.py"
+    extract_env = os.environ.copy()
+    extract_env["UNIRIG_ROOT"] = str(root)
+    if not execute(
+        "extract",
+        [blender, "-b", "--python", str(extract_script), "--", "--input", str(source), "--output", str(raw_data), "--target-faces", "50000"],
+        repo_root,
+        extract_env,
+    ):
+        return {"ok": False, "category": "UNIRIG_ERROR", "error": "UniRig Blender extraction failed", "logs": logs}
+
+    skeleton_task = _wsl_path(root / "configs" / "task" / "quick_inference_skeleton_articulationxl_ar_256.yaml")
+    skin_task = _wsl_path(root / "configs" / "task" / "quick_inference_unirig_skin.yaml")
+    # UniRig's get_files joins the output root with the input stem.  Passing an
+    # absolute input path would override that root on POSIX, so use the file
+    # name while the extracted raw_data already lives under the expected stem.
+    source_wsl = source.name
+    prediction_parent_wsl = _wsl_path(prediction_root.parent)
+    skeleton_command = _wsl_command(
+        shell, distro, python_bin, root, repo_root, compat_root,
+        " ".join([
+            shlex.quote(python_bin), "-m", "workers.unirig.infer",
+            f"--task={shlex.quote(skeleton_task)}", "--seed=42",
+            f"--input={shlex.quote(source_wsl)}",
+            f"--output={shlex.quote(_wsl_path(prediction_root / 'skeleton.fbx'))}",
+            f"--npz-dir={shlex.quote(prediction_parent_wsl)}",
+        ]),
+    )
+    if not execute("skeleton", skeleton_command, repo_root):
+        return {"ok": False, "category": "UNIRIG_ERROR", "error": "UniRig skeleton inference failed", "logs": logs}
+    generated_skeleton = prediction_root / "skeleton.npz"
+    if generated_skeleton.is_file():
+        shutil.copyfile(generated_skeleton, skeleton_prediction)
+    if not skeleton_prediction.is_file():
+        return {"ok": False, "category": "UNIRIG_OUTPUT_INVALID", "error": f"Skeleton prediction was not created: {skeleton_prediction}", "logs": logs}
+
+    skin_command = _wsl_command(
+        shell, distro, python_bin, root, repo_root, compat_root,
+        " ".join([
+            shlex.quote(python_bin), "-m", "workers.unirig.infer",
+            f"--task={shlex.quote(skin_task)}", "--seed=42",
+            f"--input={shlex.quote(source_wsl)}",
+            f"--output={shlex.quote(_wsl_path(prediction_root / 'skin.fbx'))}",
+            f"--npz-dir={shlex.quote(prediction_parent_wsl)}",
+        ]),
+    )
+    if not execute("skin", skin_command, repo_root):
+        return {"ok": False, "category": "UNIRIG_ERROR", "error": "UniRig skin inference failed", "logs": logs}
+    generated_skin = prediction_root / "skin.npz"
+    if generated_skin.is_file():
+        shutil.copyfile(generated_skin, skin_prediction)
+    if not skin_prediction.is_file():
+        return {"ok": False, "category": "UNIRIG_OUTPUT_INVALID", "error": f"Skin prediction was not created: {skin_prediction}", "logs": logs}
+
+    export_script = repo_root / "workers" / "unirig" / "blender_export.py"
+    if not execute(
+        "merge",
+        [blender, "-b", "--python", str(export_script), "--", "--prediction", str(skeleton_prediction), "--source", str(source), "--output", str(rigged), "--mode", "rigged"],
+        repo_root,
+        extract_env,
+    ):
+        return {"ok": False, "category": "UNIRIG_ERROR", "error": "UniRig Blender merge failed", "logs": logs}
     if not rigged.is_file() or rigged.stat().st_size == 0:
         return {"ok": False, "category": "UNIRIG_OUTPUT_INVALID", "error": f"UniRig merge did not produce a non-empty GLB: {rigged}", "logs": logs}
-    return {"ok": True, "provider": "UniRigProvider", "rigged_mesh": str(rigged), "skeleton": str(skeleton), "skin": str(skin), "logs": logs}
+    return {"ok": True, "provider": "UniRigProvider", "rigged_mesh": str(rigged), "skeleton": str(skeleton_prediction), "skin": str(skin_prediction), "logs": logs}
 
 
 if __name__ == "__main__":

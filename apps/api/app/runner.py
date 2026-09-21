@@ -366,6 +366,7 @@ class PipelineRunner:
         output_dir = job_dir / "rig"
         request = {"source_mesh": str(source_mesh), "output_dir": str(output_dir)}
         unirig_root = os.getenv("UNIRIG_ROOT")
+        blender = blender_path()
         env = {
             key: value
             for key, value in {
@@ -373,6 +374,7 @@ class PipelineRunner:
                 "UNIRIG_BASH": os.getenv("UNIRIG_BASH"),
                 "UNIRIG_DISTRO": os.getenv("UNIRIG_DISTRO"),
                 "UNIRIG_WSL_PYTHON": os.getenv("UNIRIG_WSL_PYTHON"),
+                "BLENDER_PATH": blender,
             }.items()
             if value
         }

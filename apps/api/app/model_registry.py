@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
+import shutil
 import subprocess
 import time
 from dataclasses import dataclass
@@ -35,6 +37,46 @@ class ModelRegistry:
 
     def all(self) -> list[ModelSpec]:
         return list(self._models)
+
+    @staticmethod
+    def _runtime_status_unirig(root: Path) -> dict[str, object]:
+        """Probe UniRig's isolated WSL runtime without starting inference."""
+        bash = os.getenv("UNIRIG_BASH") or shutil.which("wsl.exe") or shutil.which("wsl")
+        python_bin = os.getenv("UNIRIG_WSL_PYTHON", "/opt/unirig-venv/bin/python")
+        if not bash:
+            return {"ready": False, "reason": "Configure UNIRIG_BASH and install the WSL CUDA runtime"}
+        cache_key = (f"unirig:{root}", f"{bash}:{python_bin}")
+        cached = _RUNTIME_STATUS_CACHE.get(cache_key)
+        now = time.monotonic()
+        if cached and now - cached[0] < _RUNTIME_STATUS_TTL_SECONDS:
+            return cached[1]
+        probe = "import torch, spconv.pytorch; print('cuda=' + str(torch.cuda.is_available())); print('spconv=ok')"
+        command = [
+            bash,
+            "-d",
+            os.getenv("UNIRIG_DISTRO", "Ubuntu"),
+            "--",
+            "bash",
+            "-lc",
+            f"{shlex.quote(python_bin)} -c {shlex.quote(probe)}",
+        ]
+        try:
+            completed = subprocess.run(command, cwd=root, capture_output=True, text=True, timeout=20, check=False)
+        except (OSError, subprocess.SubprocessError) as error:
+            status = {"ready": False, "reason": f"UniRig WSL environment could not start: {error}"}
+        else:
+            output = f"{completed.stdout}\n{completed.stderr}".strip()
+            if completed.returncode != 0:
+                last_line = next((line.strip() for line in reversed(output.splitlines()) if line.strip()), "unknown runtime failure")
+                status = {"ready": False, "reason": f"UniRig WSL dependencies are not ready: {last_line}"}
+            elif "cuda=True" not in completed.stdout:
+                status = {"ready": False, "reason": "UniRig WSL Python cannot use CUDA"}
+            elif "spconv=ok" not in completed.stdout:
+                status = {"ready": False, "reason": "UniRig CUDA spconv is not available"}
+            else:
+                status = {"ready": True, "reason": None}
+        _RUNTIME_STATUS_CACHE[cache_key] = (now, status)
+        return status
 
     @staticmethod
     def _runtime_status(root: Path, python_executable: Path) -> dict[str, object]:
@@ -148,6 +190,12 @@ except Exception as error:
         for model in self._models:
             root_value = os.getenv(model.worker_root_env, "")
             root = Path(root_value).expanduser() if root_value else None
+            if model.id == "unirig":
+                checkout_ready = bool(root and root.is_dir() and (root / "run.py").is_file())
+                runtime = self._runtime_status_unirig(root) if checkout_ready and root else {"ready": False, "reason": "Set UNIRIG_ROOT to the official checkout"}
+                reason = runtime["reason"] if checkout_ready else (f"Set {model.worker_root_env} to the official checkout" if not root_value else f"Official checkout is incomplete: required files were not found under {root}")
+                result.append({"id": model.id, "provider": model.provider, "model_id": model.model_id, "repository": model.repository, "license": model.license, "root": str(root) if root else None, "python": os.getenv("UNIRIG_WSL_PYTHON"), "checkout_ready": checkout_ready, "runtime_ready": runtime["ready"], "installed": bool(checkout_ready and runtime["ready"]), "reason": reason})
+                continue
             python_value = os.getenv(model.python_env, "")
             python_executable = Path(python_value).expanduser() if python_value else None
             markers = model.fields.get("checkout_markers", ["run.py"])

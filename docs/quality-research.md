@@ -85,6 +85,19 @@ texture. The output is a smoke-run proof of the local pipeline, not a claim of
 Tripo-level visual equivalence; a controlled multi-view benchmark is still
 required for that claim.
 
+## UniRig local smoke run
+
+The official UniRig skeleton and skin checkpoints are available through the
+user's granted Hugging Face access and run in WSL with CUDA `12.8` PyTorch and
+`spconv-cu124`. The Windows bridge extracts the source GLB through Blender,
+runs the official skeleton and skin predictors, transfers the 32k sampled skin
+predictions back to the original mesh with KD-tree alignment, and exports a
+textured rigged GLB. A full worker run on the Hunyuan Paint output completed
+successfully: `40` joints, `2,439,662` influenced vertices, and a valid
+non-empty GLB. UniRig currently emits generic `bone_N` names for this input;
+canonical humanoid naming and animation retargeting stay explicit follow-up
+acceptance work rather than being claimed as complete.
+
 Pixal3D's seven single-view checkpoint files total about 24.05 GB decimal,
 excluding auxiliary models, dependencies and build space. Whole-repository weight
 downloads would also fetch separate multiview checkpoints. Enumerate selected
