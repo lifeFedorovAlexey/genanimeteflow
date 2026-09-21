@@ -16,7 +16,7 @@ class HunyuanWorkerTests(unittest.TestCase):
             result = run({"images": {"front": "front.png", "left": "left.png"}, "output_dir": "out"})
         self.assertEqual(result["category"], "MODEL_MISSING")
 
-    def test_requires_two_real_views(self) -> None:
+    def test_accepts_one_front_view_for_single_view_provider(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "hunyuan"
             (root / "hy3dgen" / "shapegen").mkdir(parents=True)
@@ -24,7 +24,7 @@ class HunyuanWorkerTests(unittest.TestCase):
             image.write_bytes(b"input")
             with patch.dict(os.environ, {"HUNYUAN_ROOT": str(root)}, clear=False):
                 result = run({"images": {"front": str(image)}, "output_dir": str(root / "out")})
-        self.assertEqual(result["category"], "INPUT_UNSUPPORTED")
+        self.assertEqual(result["category"], "PROVIDER_ERROR")
 
     def test_missing_view_file_is_not_silently_skipped(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -15,19 +15,21 @@ def capabilities() -> dict:
     models = ModelRegistry().status()
     spar3d = next(item for item in models if item["id"] == "spar3d")
     hunyuan = next(item for item in models if item["id"] == "hunyuan3d-2mv")
+    hunyuan_single = next(item for item in models if item["id"] == "hunyuan3d-2")
     unirig_root = os.getenv("UNIRIG_ROOT")
     unirig_ready = bool(unirig_root and all((Path(unirig_root) / relative).is_file() for relative in ("launch/inference/generate_skeleton.sh", "launch/inference/generate_skin.sh", "launch/inference/merge.sh")))
     motion_clips = MotionLibrary().clips()
     equipment_assets = EquipmentLibrary().catalog().get("assets", [])
     return {
         "providers": {
-            "AUTO": {"available": spar3d["installed"] or hunyuan["installed"], "reason": None if spar3d["installed"] or hunyuan["installed"] else f"SPAR3D: {spar3d['reason']}; Hunyuan3D-2mv: {hunyuan['reason']}"},
+            "AUTO": {"available": spar3d["installed"] or hunyuan["installed"] or hunyuan_single["installed"], "reason": None if spar3d["installed"] or hunyuan["installed"] or hunyuan_single["installed"] else f"SPAR3D: {spar3d['reason']}; Hunyuan3D-2mv: {hunyuan['reason']}; Hunyuan3D-2: {hunyuan_single['reason']}"},
             "HunyuanMultiviewProvider": {"available": hunyuan["installed"], "reason": None if hunyuan["installed"] else hunyuan["reason"]},
+            "HunyuanSingleViewProvider": {"available": hunyuan_single["installed"], "reason": None if hunyuan_single["installed"] else hunyuan_single["reason"]},
             "Spar3DProvider": {"available": spar3d["installed"], "reason": None if spar3d["installed"] else spar3d["reason"]},
         },
         "stages": {
             "references": {"available": True, "description": "Validate, crop, alpha-process, normalize and persist reference images"},
-            "geometry": {"available": spar3d["installed"] or hunyuan["installed"], "reason": None if spar3d["installed"] or hunyuan["installed"] else f"SPAR3D: {spar3d['reason']}; Hunyuan3D-2mv: {hunyuan['reason']}"},
+            "geometry": {"available": spar3d["installed"] or hunyuan["installed"] or hunyuan_single["installed"], "reason": None if spar3d["installed"] or hunyuan["installed"] or hunyuan_single["installed"] else f"SPAR3D: {spar3d['reason']}; Hunyuan3D-2mv: {hunyuan['reason']}; Hunyuan3D-2: {hunyuan_single['reason']}"},
             "textures": {"available": True, "reason": "Runs Hunyuan Paint on Hunyuan meshes; otherwise preserves and validates provider textures"},
             "retopology": {"available": bool(blender), "description": "Blender GLB import, triangle decimation and export" if blender else None, "reason": None if blender else "Blender is not installed"},
             "rig": {"available": unirig_ready, "reason": None if unirig_ready else "Configure UNIRIG_ROOT with the official UniRig inference scripts and checkpoint"},

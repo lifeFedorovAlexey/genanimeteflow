@@ -171,18 +171,33 @@ class PipelineRunner:
         processed = {slot.view: str(self.store.job_dir(manifest.job_id) / slot.processed_path) for slot in manifest.references.values() if slot.processed_path}
         requested = manifest.requested_provider
         hunyuan = models.get("hunyuan3d-2mv", {"installed": False, "reason": "Hunyuan3D-2mv is not configured"})
+        hunyuan_single = models.get("hunyuan3d-2", {"installed": False, "reason": "Hunyuan3D-2 single-view is not configured"})
         spar3d = models.get("spar3d", {"installed": False, "reason": "SPAR3D is not configured"})
-        use_hunyuan = requested == "HunyuanMultiviewProvider" or (requested == "AUTO" and len(processed) >= 2 and bool(hunyuan["installed"]))
+        use_multiview = len(processed) >= 2 and bool(hunyuan["installed"])
+        use_single_view = len(processed) == 1 and bool(hunyuan_single["installed"])
+        if requested == "HunyuanMultiviewProvider":
+            use_hunyuan = True
+            hunyuan = hunyuan
+        elif requested == "HunyuanSingleViewProvider":
+            use_hunyuan = True
+            hunyuan = hunyuan_single
+        else:
+            use_hunyuan = use_multiview or use_single_view
+            hunyuan = hunyuan if use_multiview else hunyuan_single
         if use_hunyuan:
             if not hunyuan["installed"]:
                 raise WorkerFailure("MODEL_MISSING", str(hunyuan["reason"]))
-            if len(processed) < 2:
+            if requested == "HunyuanMultiviewProvider" and len(processed) < 2:
                 raise WorkerFailure("INPUT_UNSUPPORTED", "Hunyuan3D-2mv requires FRONT plus at least one additional processed view")
+            if requested == "HunyuanSingleViewProvider" and len(processed) != 1:
+                raise WorkerFailure("INPUT_UNSUPPORTED", "Hunyuan3D-2 single-view expects only FRONT")
             job_dir = self.store.job_dir(manifest.job_id)
-            output_dir = job_dir / "geometry" / "hunyuan3d-2mv"
-            settings = {"steps": 30, "octree_resolution": 380, "num_chunks": 20000, "seed": 42, "low_vram_mode": manifest.profile.upper() != "MAX"}
+            model_id = str(hunyuan["model_id"])
+            multiview = model_id.endswith("2mv")
+            output_dir = job_dir / "geometry" / ("hunyuan3d-2mv" if multiview else "hunyuan3d-2")
+            settings = {"model_id": model_id, "subfolder": "hunyuan3d-dit-v2-mv" if multiview else "hunyuan3d-dit-v2-0", "steps": 30, "octree_resolution": 380, "num_chunks": 20000, "seed": 42, "low_vram_mode": manifest.profile.upper() != "MAX"}
             request = {"images": processed, "output_dir": str(output_dir), "settings": settings}
-            logger.info("Starting official Hunyuan3D-2mv worker with %s views", len(processed))
+            logger.info("Starting official Hunyuan worker %s with %s views", model_id, len(processed))
             monitor = VramMonitor()
             before = monitor.snapshot()
             monitor.start()
@@ -193,7 +208,7 @@ class PipelineRunner:
                     {
                         "HUNYUAN_ROOT": str(hunyuan["root"]),
                         "HUNYUAN_PYTHON": str(hunyuan["python"]),
-                        "HUNYUAN_SHAPE_MODEL_PATH": os.getenv("HUNYUAN_SHAPE_MODEL_PATH", ""),
+                        "HUNYUAN_SHAPE_MODEL_PATH": os.getenv("HUNYUAN_SHAPE_MODEL_PATH", "") if multiview else os.getenv("HUNYUAN_SINGLE_MODEL_PATH", ""),
                     },
                     log_path, process_key=f"{manifest.job_id}:{StageName.GEOMETRY.value}",
                 )
@@ -204,18 +219,18 @@ class PipelineRunner:
             report = validate_glb(mesh_path)
             if not report.valid:
                 raise WorkerFailure("PROVIDER_OUTPUT_INVALID", "; ".join(report.errors))
-            manifest.actual_provider = "HunyuanMultiviewProvider"
+            manifest.actual_provider = result.payload.get("provider", "HunyuanMultiviewProvider")
             ignored = result.payload.get("ignored_views", [])
             if ignored:
                 manifest.warnings.append("Hunyuan3D-2mv currently consumes FRONT/LEFT/BACK; RIGHT was retained but not passed to this provider")
             manifest.stages[StageName.GEOMETRY.value].result = {"mesh_path": str(mesh_path.relative_to(job_dir)), "settings": settings, "vram": vram, "provider_views": sorted(processed), "stdout": result.stdout[-4000:], "validation": report.__dict__}
             logger.info("Generated multiview mesh saved: %s", mesh_path)
             return
-        if requested == "HunyuanMultiviewProvider":
+        if requested in {"HunyuanMultiviewProvider", "HunyuanSingleViewProvider"}:
             raise WorkerFailure("MODEL_MISSING", str(hunyuan["reason"]))
         if not spar3d["installed"]:
-            if requested == "AUTO" and hunyuan["installed"]:
-                raise WorkerFailure("INPUT_UNSUPPORTED", "Hunyuan3D-2mv is installed but needs at least two processed views; add LEFT, BACK or RIGHT")
+            if requested == "AUTO" and (hunyuan["installed"] or hunyuan_single["installed"]):
+                raise WorkerFailure("MODEL_MISSING", "Hunyuan model is configured but not ready for the current input")
             raise WorkerFailure("MODEL_MISSING", str(spar3d["reason"]))
         job_dir = self.store.job_dir(manifest.job_id)
         output_dir = job_dir / "geometry" / "spar3d"
@@ -275,7 +290,7 @@ class PipelineRunner:
             raise RuntimeError("Geometry must be READY before texture extraction")
         job_dir = self.store.job_dir(manifest.job_id)
         mesh_path = job_dir / mesh_value
-        if manifest.actual_provider == "HunyuanMultiviewProvider":
+        if manifest.actual_provider in {"HunyuanMultiviewProvider", "HunyuanSingleViewProvider"}:
             front = manifest.references.get("front")
             hunyuan = next((item for item in self.models.status() if item["id"] == "hunyuan3d-2mv"), None)
             if not hunyuan or not hunyuan["installed"]:

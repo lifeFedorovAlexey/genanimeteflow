@@ -36,8 +36,9 @@ def run(request: dict) -> dict:
         pipeline.enable_model_cpu_offload()
     generator = torch.Generator(device="cuda").manual_seed(int(request.get("seed", 42)))
     started = time.perf_counter()
+    pipeline_image = images if len(images) > 1 else images["front"]
     mesh = pipeline(
-        image=images,
+        image=pipeline_image,
         num_inference_steps=int(request.get("steps", 30)),
         octree_resolution=int(request.get("octree_resolution", 380)),
         num_chunks=int(request.get("num_chunks", 20000)),

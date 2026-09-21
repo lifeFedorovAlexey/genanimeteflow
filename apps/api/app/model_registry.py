@@ -123,7 +123,8 @@ except Exception as error:
     print('weights=' + type(error).__name__)
 """
         environment = os.environ.copy()
-        environment.update({"CF_MODEL_ID": model.model_id, "CF_MODEL_CONFIG": model.fields["model_config"], "CF_MODEL_WEIGHTS": model.fields["model_weights"], "CF_MODEL_PATH": os.getenv("HUNYUAN_SHAPE_MODEL_PATH", "")})
+        model_path_env = model.fields.get("model_path_env", "HUNYUAN_SHAPE_MODEL_PATH")
+        environment.update({"CF_MODEL_ID": model.model_id, "CF_MODEL_CONFIG": model.fields["model_config"], "CF_MODEL_WEIGHTS": model.fields["model_weights"], "CF_MODEL_PATH": os.getenv(model_path_env, "")})
         try:
             completed = subprocess.run([str(python_executable), "-c", probe], cwd=root, env=environment, capture_output=True, text=True, timeout=20, check=False)
         except (OSError, subprocess.SubprocessError) as error:
@@ -153,7 +154,7 @@ except Exception as error:
             checkout_ready = bool(root and root.is_dir() and all((root / marker).is_file() for marker in markers))
             runtime: dict[str, object] = {"ready": False, "reason": None}
             if checkout_ready and python_executable and python_executable.is_file():
-                runtime = self._runtime_status_hunyuan(root, python_executable, model) if model.id == "hunyuan3d-2mv" else self._runtime_status(root, python_executable)
+                runtime = self._runtime_status_hunyuan(root, python_executable, model) if model.id.startswith("hunyuan3d-") else self._runtime_status(root, python_executable)
             if not root_value:
                 reason = f"Set {model.worker_root_env} to the official checkout"
             elif not checkout_ready:

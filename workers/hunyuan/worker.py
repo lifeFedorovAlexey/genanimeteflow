@@ -30,8 +30,8 @@ def run(request: dict) -> dict:
             if not path.is_file():
                 return {"ok": False, "category": "INPUT_MISSING", "error": f"Processed {view} reference was not found: {path}"}
             selected[view] = str(path)
-    if len(selected) < 2:
-        return {"ok": False, "category": "INPUT_UNSUPPORTED", "error": "Hunyuan3D-2mv needs FRONT plus at least one additional view"}
+    if not selected:
+        return {"ok": False, "category": "INPUT_MISSING", "error": "Hunyuan requires a processed FRONT image"}
     # The released Hunyuan2mv API documents front/left/back. Do not silently
     # pretend that RIGHT was consumed; report it to the orchestration layer.
     ignored_views = sorted(set(images) - set(selected))
@@ -65,7 +65,8 @@ def run(request: dict) -> dict:
     mesh_path = Path(str(result.get("mesh_path", ""))).resolve()
     if not mesh_path.is_file() or mesh_path.stat().st_size == 0:
         return {"ok": False, "category": "PROVIDER_OUTPUT_INVALID", "error": f"Hunyuan did not produce a non-empty GLB: {mesh_path}", "stdout": completed.stdout, "stderr": completed.stderr}
-    result.update(provider="HunyuanMultiviewProvider", ignored_views=ignored_views, stdout=completed.stdout, stderr=completed.stderr)
+    provider = "HunyuanMultiviewProvider" if str(request.get("settings", {}).get("model_id", "")).endswith("2mv") else "HunyuanSingleViewProvider"
+    result.update(provider=provider, ignored_views=ignored_views, stdout=completed.stdout, stderr=completed.stderr)
     return result
 
 
@@ -77,7 +78,7 @@ def _request_for_inference(request: dict, images: dict[str, str], output_dir: Pa
         "images": images,
         "output_dir": str(output_dir),
         "model_id": str(settings.get("model_id", "tencent/Hunyuan3D-2mv")),
-        "model_path": os.getenv("HUNYUAN_SHAPE_MODEL_PATH", ""),
+        "model_path": os.getenv("HUNYUAN_SHAPE_MODEL_PATH", "") if "2mv" in str(settings.get("model_id", "")) else os.getenv("HUNYUAN_SINGLE_MODEL_PATH", ""),
         "subfolder": str(settings.get("subfolder", "hunyuan3d-dit-v2-mv")),
         "steps": int(settings.get("steps", 30)),
         "octree_resolution": int(settings.get("octree_resolution", 380)),
