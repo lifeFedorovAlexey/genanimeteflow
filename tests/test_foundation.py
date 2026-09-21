@@ -59,6 +59,7 @@ class FoundationTests(unittest.TestCase):
             quality = assess_reference(processed)
             self.assertEqual(result["processed_size"], [384, 384])
             self.assertGreater(result["alpha_pixels"], 0)
+            self.assertLess(result["foreground_ratio"], 0.95)
             self.assertIn(quality["level"], {"GOOD", "WARNING"})
             self.assertTrue(processed.is_file())
 

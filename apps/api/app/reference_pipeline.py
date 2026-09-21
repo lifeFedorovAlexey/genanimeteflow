@@ -11,18 +11,17 @@ from PIL import Image, ImageChops
 SUPPORTED_VIEWS = ("front", "left", "back", "right")
 
 
-def _foreground_bbox(image: Image.Image) -> tuple[int, int, int, int] | None:
+def _foreground_mask(image: Image.Image) -> Image.Image:
     rgba = image.convert("RGBA")
-    alpha = rgba.getchannel("A")
-    bbox = alpha.getbbox()
-    if bbox and bbox[2] - bbox[0] > 2 and bbox[3] - bbox[1] > 2:
-        return bbox
+    existing_alpha = rgba.getchannel("A")
     rgb = rgba.convert("RGB")
     corners = [rgb.getpixel((x, y)) for x, y in ((0, 0), (rgb.width - 1, 0), (0, rgb.height - 1), (rgb.width - 1, rgb.height - 1))]
     bg = tuple(sum(pixel[index] for pixel in corners) // len(corners) for index in range(3))
     diff = ImageChops.difference(rgb, Image.new("RGB", rgb.size, bg)).convert("L")
-    threshold = diff.point(lambda value: 255 if value > 18 else 0)
-    return threshold.getbbox()
+    color_mask = diff.point(lambda value: 255 if value > 18 else 0)
+    if existing_alpha.getbbox() and any(value < 255 for value in existing_alpha.getdata()):
+        return ImageChops.multiply(existing_alpha, color_mask)
+    return color_mask
 
 
 def preprocess_reference(source: Path, destination: Path, resolution: int) -> dict[str, Any]:
@@ -30,10 +29,12 @@ def preprocess_reference(source: Path, destination: Path, resolution: int) -> di
         raise ValueError("resolution must be one of 384, 512, 640, 768")
     with Image.open(source) as loaded:
         image = loaded.convert("RGBA")
-        bbox = _foreground_bbox(image)
+        mask = _foreground_mask(image)
+        bbox = mask.getbbox()
         if bbox is None:
             raise ValueError("reference has no detectable foreground")
         cropped = image.crop(bbox)
+        cropped.putalpha(mask.crop(bbox))
         canvas_size = max(cropped.width, cropped.height)
         canvas = Image.new("RGBA", (canvas_size, canvas_size), (0, 0, 0, 0))
         canvas.alpha_composite(cropped, ((canvas_size - cropped.width) // 2, (canvas_size - cropped.height) // 2))
