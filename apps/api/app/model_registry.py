@@ -43,7 +43,7 @@ class ModelRegistry:
         now = time.monotonic()
         if cached and now - cached[0] < _RUNTIME_STATUS_TTL_SECONDS:
             return cached[1]
-        command = [str(python_executable), "-c", "import spar3d, torch; print('cuda=' + str(torch.cuda.is_available()))"]
+        command = [str(python_executable), "-c", "import os; os.environ['NO_ALBUMENTATIONS_UPDATE'] = '1'; import torch; from texture_baker import TextureBaker; from uv_unwrapper import Unwrapper; from transparent_background import Remover; from spar3d.system import SPAR3D; print('cuda=' + str(torch.cuda.is_available()))"]
         try:
             completed = subprocess.run(command, cwd=root, capture_output=True, text=True, timeout=15, check=False)
         except (OSError, subprocess.SubprocessError) as error:

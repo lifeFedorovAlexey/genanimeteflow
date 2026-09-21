@@ -14,6 +14,7 @@ assets/equipment/*
 hardware_profile.json
 *.tmp
 *.part
+spar3d-*.log
 *.tsbuildinfo
 apps/web/vite.config.js
 apps/web/vite.config.d.ts

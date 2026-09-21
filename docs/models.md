@@ -14,7 +14,27 @@ On Windows, use the repository installer to clone the official checkout, create 
 .\scripts\install_spar3d.ps1 -PersistPaths
 ```
 
+The Windows installer uses the verified Python 3.11 / PyTorch 2.11.0 + CUDA 12.8 / torchvision 0.26.0 combination. It selects Visual Studio 2022 and the Windows SDK resource compiler, disables Unix-only native flags, and builds the texture/UV extensions without pip build isolation. CLIP and AlphaCLIP also build in the prepared environment, with setuptools 69.5.1. Flet 0.24.1, packaging 23.2 and wheel 0.43.0 avoid incompatible transitive updates.
+
+The tracked `scripts/patches/spar3d-cuda-headers.patch` replaces the unused Python binding header in the CUDA source with `torch/types.h`. This resolves the observed CUDA/MSVC error in PyTorch's `compiled_autograd.h` without changing the reconstruction algorithm. The source patch is applied once and checked before subsequent installs. This separation of CUDA code from Python bindings follows [PyTorch extension guidance](https://docs.pytorch.org/docs/2.14/cpp_extension.html).
+
+Successful setup requires `pip check`, an actual CUDA texture bake, a native UV unwrap and the official CLI's `--help` command to pass. Repeat the offline verification with:
+
+```powershell
+& 'D:\models\venvs\spar3d\Scripts\python.exe' .\scripts\verify_spar3d.py 'D:\models\stable-point-aware-3d'
+```
+
+Use `-SkipTorch` to reuse the installed CUDA PyTorch, `-SkipRequirements` to skip ordinary Python dependencies, or `-RebuildNative` to rebuild installed native modules after changing PyTorch/toolchains. None of these switches skips final runtime verification. Triangle and quad remeshing dependencies are included; the optional upstream Gradio demo is not needed by Character Factory.
+
 The model is gated: before the first generation, accept access to `stabilityai/stable-point-aware-3d` on Hugging Face and log in with a read token in the SPAR3D environment. The installer intentionally does not ask for, store, or transmit a token.
+
+Open [the model access page](https://huggingface.co/stabilityai/stable-point-aware-3d), accept its terms in your own account, then authenticate locally:
+
+```powershell
+& 'D:\models\venvs\spar3d\Scripts\huggingface-cli.exe' login
+```
+
+Do not paste the token into a chat. Adding `--check-model-access` to the verification command checks access without downloading weights or printing credentials. HTTP 401/403 at this stage indicates a model-access step, not a broken dependency install. Passing the offline checks does not imply a complete image-to-mesh inference has run.
 
 For an existing installation, these are the two paths Character Factory uses:
 
