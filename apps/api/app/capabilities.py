@@ -6,6 +6,7 @@ from pathlib import Path
 
 from .model_registry import ModelRegistry
 from .motion_library import MotionLibrary
+from .equipment_library import EquipmentLibrary
 
 
 def capabilities() -> dict:
@@ -15,6 +16,7 @@ def capabilities() -> dict:
     unirig_root = os.getenv("UNIRIG_ROOT")
     unirig_ready = bool(unirig_root and all((Path(unirig_root) / relative).is_file() for relative in ("launch/inference/generate_skeleton.sh", "launch/inference/generate_skin.sh", "launch/inference/merge.sh")))
     motion_clips = MotionLibrary().clips()
+    equipment_assets = EquipmentLibrary().catalog().get("assets", [])
     return {
         "providers": {
             "AUTO": {"available": spar3d["installed"], "reason": None if spar3d["installed"] else spar3d["reason"]},
@@ -28,6 +30,7 @@ def capabilities() -> dict:
             "retopology": {"available": bool(blender), "description": "Blender GLB import, triangle decimation and export" if blender else None, "reason": None if blender else "Blender is not installed"},
             "rig": {"available": unirig_ready, "reason": None if unirig_ready else "Configure UNIRIG_ROOT with the official UniRig inference scripts and checkpoint"},
             "motions": {"available": bool(blender and motion_clips), "description": "Blender canonical-bone retarget and bake" if blender and motion_clips else None, "reason": None if blender and motion_clips else "Install and register at least one validated motion library" if blender else "Blender is not installed"},
+            "equipment": {"available": bool(blender and equipment_assets), "description": "Blender socket attachment for registered rigid equipment" if blender and equipment_assets else None, "reason": None if blender and equipment_assets else "Register at least one validated equipment asset" if blender else "Blender is not installed"},
             "export": {"available": bool(blender), "description": "Blender GLB/FBX export with round-trip validation" if blender else None, "reason": None if blender else "Blender is not installed"},
         },
         "models": models,

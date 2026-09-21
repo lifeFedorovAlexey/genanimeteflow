@@ -31,6 +31,13 @@ class EquipmentLibrary:
     def catalog(self) -> dict[str, Any]:
         return json.loads(self.catalog_path.read_text(encoding="utf-8"))
 
+    def selected_assets(self, asset_ids: list[str]) -> list[dict[str, Any]]:
+        available = {str(item["id"]): item for item in self.catalog().get("assets", [])}
+        missing = [asset_id for asset_id in asset_ids if asset_id not in available]
+        if missing:
+            raise EquipmentLibraryError("Unknown equipment asset IDs: " + ", ".join(missing))
+        return [available[asset_id] for asset_id in asset_ids]
+
     def register_local(self, source_path: Path, asset_id: str, name: str, asset_type: str, slot: str, handedness: str | None = None, primary_socket: str | None = None, secondary_grip: dict[str, Any] | None = None, tags: list[str] | None = None) -> dict[str, Any]:
         source = source_path.expanduser().resolve()
         if not source.is_file() or source.suffix.lower() != ".glb":

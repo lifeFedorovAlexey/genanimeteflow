@@ -14,6 +14,7 @@ from .job_store import JobStore
 from .config import REPO_ROOT
 from .model_registry import ModelRegistry
 from .motion_library import MotionLibrary
+from .equipment_library import EquipmentLibrary
 from .pipeline_graph import STAGE_DEPENDENCIES
 from .process_manager import ProcessManager, WorkerFailure
 from tools.validation.glb import extract_glb_images, validate_glb
@@ -86,7 +87,7 @@ class PipelineRunner:
         started = record.started_at
         try:
             logger.info("Stage started: %s", stage.value)
-            heavy_stages = {StageName.GEOMETRY, StageName.RETOPOLOGY, StageName.RIG, StageName.MOTIONS, StageName.EXPORT}
+            heavy_stages = {StageName.GEOMETRY, StageName.RETOPOLOGY, StageName.RIG, StageName.EQUIPMENT, StageName.MOTIONS, StageName.EXPORT}
             if stage in heavy_stages:
                 await self.queue.run(lambda: self._execute_stage(manifest, stage, logger, log_path))
             else:
@@ -128,6 +129,8 @@ class PipelineRunner:
             await self._retopology(manifest, logger, log_path)
         elif stage is StageName.RIG:
             await self._rig(manifest, logger, log_path)
+        elif stage is StageName.EQUIPMENT:
+            await self._equipment(manifest, logger, log_path)
         elif stage is StageName.MOTIONS:
             await self._motions(manifest, logger, log_path)
         elif stage is StageName.EXPORT:
@@ -272,7 +275,9 @@ class PipelineRunner:
         if not blender:
             raise WorkerFailure("BLENDER_MISSING", "Blender executable was not found")
         job_dir = self.store.job_dir(manifest.job_id)
-        source_mesh = job_dir / mesh_value
+        equipment = manifest.stages[StageName.EQUIPMENT.value]
+        equipment_mesh = equipment.result.get("mesh_path") if equipment.status is StageStatus.READY else None
+        source_mesh = job_dir / (equipment_mesh if isinstance(equipment_mesh, str) else mesh_value)
         glb_path = job_dir / "export" / "unit.glb"
         fbx_path = job_dir / "export" / "unit.fbx"
         request = {"source_mesh": str(source_mesh), "glb_output": str(glb_path), "fbx_output": str(fbx_path), "selected_actions": manifest.export_actions}
@@ -286,6 +291,33 @@ class PipelineRunner:
         manifest_path = save_unit_manifest(manifest, job_dir, glb_path, fbx_path, {**roundtrip, "glb": glb_report.__dict__, "rig": rig_report.__dict__})
         manifest.stages[StageName.EXPORT.value].result = {"glb_path": str(glb_path.relative_to(job_dir)), "fbx_path": str(fbx_path.relative_to(job_dir)), "manifest_path": str(manifest_path.relative_to(job_dir)), "selected_actions": manifest.export_actions, "roundtrip": {**roundtrip, "glb": glb_report.__dict__, "rig": rig_report.__dict__}}
         logger.info("Export completed: %s", glb_path)
+
+    async def _equipment(self, manifest: JobManifest, logger: logging.Logger, log_path: Path) -> None:
+        if not manifest.equipment_assets:
+            raise RuntimeError("Select at least one equipment asset before attachment")
+        rig = manifest.stages[StageName.RIG.value]
+        mesh_value = rig.result.get("mesh_path")
+        if rig.status is not StageStatus.READY or not isinstance(mesh_value, str):
+            raise RuntimeError("Rig must be READY before equipment attachment")
+        blender = shutil.which("blender")
+        if not blender:
+            raise WorkerFailure("BLENDER_MISSING", "Blender executable was not found")
+        job_dir = self.store.job_dir(manifest.job_id)
+        assets = EquipmentLibrary().selected_assets(manifest.equipment_assets)
+        for asset in assets:
+            asset_path = Path(str(asset["asset_path"]))
+            if not asset_path.is_file():
+                raise WorkerFailure("EQUIPMENT_SOURCE_MISSING", f"Equipment source does not exist: {asset_path}")
+        output_mesh = job_dir / "equipment" / "attached.glb"
+        request = {"target_rig": str(job_dir / mesh_value), "output_mesh": str(output_mesh), "assets": assets}
+        logger.info("Attaching %s equipment assets", len(assets))
+        result = await asyncio.to_thread(self.process_manager.run_json_worker, [sys.executable, "-m", "workers.blender.equipment_worker"], request, REPO_ROOT, {"BLENDER_PATH": blender}, log_path)
+        report = validate_glb(output_mesh, require_skeleton=True)
+        rig_report = validate_rigged_glb(output_mesh, require_canonical=False)
+        if not report.valid or not rig_report.valid:
+            raise WorkerFailure("EQUIPMENT_OUTPUT_INVALID", "; ".join(report.errors + rig_report.errors))
+        manifest.stages[StageName.EQUIPMENT.value].result = {"mesh_path": str(output_mesh.relative_to(job_dir)), "assets": assets, "sockets": result.payload.get("sockets", []), "worker": result.payload, "validation": {"glb": report.__dict__, "rig": rig_report.__dict__}}
+        logger.info("Equipment output saved: %s", output_mesh)
 
     async def _motions(self, manifest: JobManifest, logger: logging.Logger, log_path: Path) -> None:
         if not manifest.motion_clips:

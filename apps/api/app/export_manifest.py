@@ -13,6 +13,8 @@ def build_unit_manifest(job: JobManifest, job_dir: Path, glb_path: Path, fbx_pat
     validation = (final_stage.result.get("validation") if final_stage else {}) or {}
     textures = job.stages.get("textures")
     rig = job.stages.get("rig")
+    equipment = job.stages.get("equipment")
+    equipment_result = equipment.result if equipment else {}
     return {
         "unit_id": job.job_id,
         "source_references": {view: slot.model_dump(mode="json") for view, slot in job.references.items()},
@@ -28,8 +30,8 @@ def build_unit_manifest(job: JobManifest, job_dir: Path, glb_path: Path, fbx_pat
         "canonical_mapping": rig.result.get("validation", {}).get("canonical_mapping", {}) if rig else {},
         "animations": job.export_actions,
         "motion_sources": [],
-        "equipment": [],
-        "sockets": [],
+        "equipment": equipment_result.get("assets", []),
+        "sockets": equipment_result.get("sockets", []),
         "ik_settings": {},
         "validation": {"glb_roundtrip": roundtrip, "final_stage": validation},
         "pipeline_version": job.pipeline_version,

@@ -52,7 +52,10 @@ class JobStore:
         raw = read_json(self.job_dir(job_id) / "job.json")
         if raw is None:
             raise FileNotFoundError(job_id)
-        return JobManifest.model_validate(raw)
+        manifest = JobManifest.model_validate(raw)
+        for stage in StageName:
+            manifest.stages.setdefault(stage.value, StageRecord(name=stage))
+        return manifest
 
     def list(self) -> list[JobManifest]:
         result: list[JobManifest] = []

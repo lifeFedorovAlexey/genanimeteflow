@@ -17,7 +17,7 @@ from .model_registry import ModelRegistry
 from .motion_library import MotionLibrary, MotionLibraryError
 from .pipeline_graph import STAGE_DEPENDENCIES
 from .runner import PipelineRunner, SingleGpuQueue
-from .schemas import EquipmentRegisterRequest, ExportSelectionRequest, JobCreateRequest, JobManifest, MotionRegisterRequest, MotionSelectionRequest, ReferenceSlot, Settings, StageName
+from .schemas import EquipmentRegisterRequest, EquipmentSelectionRequest, ExportSelectionRequest, JobCreateRequest, JobManifest, MotionRegisterRequest, MotionSelectionRequest, ReferenceSlot, Settings, StageName
 from .storage import atomic_write_json, read_json
 
 ensure_directories()
@@ -65,6 +65,18 @@ def register_equipment(request: EquipmentRegisterRequest) -> dict:
         return EquipmentLibrary().register_local(Path(request.source_path), request.asset_id, request.name, request.asset_type, request.slot, request.handedness, request.primary_socket, request.secondary_grip, request.tags)
     except (EquipmentLibraryError, OSError, ValueError) as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.put("/api/jobs/{job_id}/equipment-selection", response_model=JobManifest)
+def set_equipment_selection(job_id: str, request: EquipmentSelectionRequest) -> JobManifest:
+    manifest = get_job(job_id)
+    try:
+        EquipmentLibrary().selected_assets(request.assets)
+    except EquipmentLibraryError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    manifest.equipment_assets = request.assets
+    store.save(manifest)
+    return manifest
 
 
 @app.post("/api/motions/register")

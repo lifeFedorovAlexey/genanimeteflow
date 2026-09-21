@@ -30,6 +30,7 @@ class EquipmentLibraryTests(unittest.TestCase):
             self.assertEqual(record["asset_type"], "WEAPON")
             self.assertTrue((root / "equipment" / "iron-sword" / "equipment.manifest.json").is_file())
             self.assertEqual(library.catalog()["assets"][0]["id"], "iron-sword")
+            self.assertEqual(library.selected_assets(["iron-sword"])[0]["primary_socket"], "hand_r")
 
     def test_rejects_weapon_without_primary_socket(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
