@@ -174,10 +174,11 @@ class PipelineRunner:
         output_dir = job_dir / "geometry" / "spar3d"
         profile = manifest.profile.upper()
         settings = {
-            # The official SPAR3D low-VRAM path is ~7 GB and leaves headroom for
-            # Windows, the browser and the API on the target RTX 4070 12 GB card.
-            "texture_resolution": 512 if profile in {"SAFE", "BALANCED"} else 1024,
-            "low_vram_mode": profile in {"SAFE", "BALANCED"},
+            # 1024 is the useful texture threshold on the target RTX 4070.  The
+            # official low-VRAM path still peaks around 8.3 GB, so BALANCED can
+            # use it without paying the quality cost of the old 512 atlas.
+            "texture_resolution": 512 if profile == "SAFE" else 1024,
+            "low_vram_mode": profile != "MAX",
             "remesh": "none",
         }
         retry_history: list[dict] = []
@@ -212,6 +213,11 @@ class PipelineRunner:
         if not report.valid:
             raise WorkerFailure("PROVIDER_OUTPUT_INVALID", "; ".join(report.errors))
         manifest.actual_provider = result.payload["provider"]
+        processed_views = [slot.view for slot in manifest.references.values() if slot.processed_path]
+        if len(processed_views) == 1:
+            warning = "Geometry was inferred from one reference view; hidden-side detail and texture quality may be approximate."
+            manifest.warnings = [item for item in manifest.warnings if not item.startswith("Geometry was inferred from one reference view;")]
+            manifest.warnings.append(warning)
         manifest.stages[StageName.GEOMETRY.value].result = {"mesh_path": str(mesh_path.relative_to(job_dir)), "settings": settings, "retry_history": retry_history, "vram": vram_metrics, "stdout": result.stdout[-4000:], "validation": report.__dict__}
         logger.info("Generated mesh saved: %s", mesh_path)
 

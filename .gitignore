@@ -9,6 +9,10 @@ jobs/*/references/original/
 jobs/*/references/processed/
 jobs/*/logs/
 jobs/*/job.json
+jobs/*/geometry/
+jobs/*/textures/
+jobs/*/retopology/
+jobs/*/previews/
 assets/equipment/*
 .vite-cache/
 hardware_profile.json
