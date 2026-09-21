@@ -23,12 +23,12 @@ ALIASES: dict[str, tuple[str, ...]] = {
     "upperarm_r": ("upperarm_r", "rightupperarm", "r_upperarm", "mixamorig:rightarm"),
     "lowerarm_r": ("lowerarm_r", "rightlowerarm", "r_lowerarm", "mixamorig:rightforearm"),
     "hand_r": ("hand_r", "righthand", "r_hand", "mixamorig:righthand"),
-    "upperleg_l": ("upperleg_l", "leftupleg", "leftthigh", "l_thigh", "mixamorig:leftupleg"),
-    "lowerleg_l": ("lowerleg_l", "leftleg", "leftcalf", "l_calf", "mixamorig:leftleg"),
-    "foot_l": ("foot_l", "leftfoot", "l_foot", "mixamorig:leftfoot"),
-    "upperleg_r": ("upperleg_r", "rightupleg", "rightthigh", "r_thigh", "mixamorig:rightupleg"),
-    "lowerleg_r": ("lowerleg_r", "rightleg", "rightcalf", "r_calf", "mixamorig:rightleg"),
-    "foot_r": ("foot_r", "rightfoot", "r_foot", "mixamorig:rightfoot"),
+    "upperleg_l": ("upperleg_l", "leftupleg", "leftthigh", "thigh_l", "l_thigh", "mixamorig:leftupleg"),
+    "lowerleg_l": ("lowerleg_l", "leftleg", "leftcalf", "calf_l", "l_calf", "mixamorig:leftleg"),
+    "foot_l": ("foot_l", "leftfoot", "foot_l", "l_foot", "mixamorig:leftfoot"),
+    "upperleg_r": ("upperleg_r", "rightupleg", "rightthigh", "thigh_r", "r_thigh", "mixamorig:rightupleg"),
+    "lowerleg_r": ("lowerleg_r", "rightleg", "rightcalf", "calf_r", "r_calf", "mixamorig:rightleg"),
+    "foot_r": ("foot_r", "rightfoot", "foot_r", "r_foot", "mixamorig:rightfoot"),
 }
 
 
@@ -115,6 +115,7 @@ def run(request: dict) -> dict:
     bpy.ops.pose.select_all(action="SELECT")
     bpy.ops.nla.bake(frame_start=frame_start, frame_end=frame_end, step=1, only_selected=False, visual_keying=True, clear_constraints=True, use_current_action=True, bake_types={"POSE"})
     bpy.ops.object.mode_set(mode="OBJECT")
+    baked_action_name = baked_action.name
     bpy.ops.object.select_all(action="DESELECT")
     target.select_set(True)
     bpy.context.view_layer.objects.active = target
@@ -122,12 +123,15 @@ def run(request: dict) -> dict:
         if obj != source:
             bpy.data.objects.remove(obj, do_unlink=True)
     bpy.data.objects.remove(source, do_unlink=True)
+    for candidate in list(bpy.data.actions):
+        if candidate != baked_action and candidate.users == 0:
+            bpy.data.actions.remove(candidate)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     bpy.ops.export_scene.gltf(filepath=str(output_path), export_format="GLB", export_animations=True, export_skins=True, export_materials="EXPORT")
     if not output_path.is_file() or output_path.stat().st_size == 0:
         raise RuntimeError("Blender did not create normalized motion output")
-    roundtrip = _roundtrip(output_path, baked_action.name)
-    return {"ok": True, "action": action_name, "normalized_action": baked_action.name, "canonical_mapping": {key: {"source": value[0], "target": value[1]} for key, value in mapping.items()}, "frame_start": frame_start, "frame_end": frame_end, "roundtrip": roundtrip}
+    roundtrip = _roundtrip(output_path, baked_action_name)
+    return {"ok": True, "action": action_name, "normalized_action": baked_action_name, "canonical_mapping": {key: {"source": value[0], "target": value[1]} for key, value in mapping.items()}, "frame_start": frame_start, "frame_end": frame_end, "roundtrip": roundtrip}
 
 
 def _request_path() -> Path:

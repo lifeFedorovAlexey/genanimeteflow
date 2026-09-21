@@ -93,10 +93,24 @@ user's granted Hugging Face access and run in WSL with CUDA `12.8` PyTorch and
 runs the official skeleton and skin predictors, transfers the 32k sampled skin
 predictions back to the original mesh with KD-tree alignment, and exports a
 textured rigged GLB. A full worker run on the Hunyuan Paint output completed
-successfully: `40` joints, `2,439,662` influenced vertices, and a valid
-non-empty GLB. UniRig currently emits generic `bone_N` names for this input;
-canonical humanoid naming and animation retargeting stay explicit follow-up
-acceptance work rather than being claimed as complete.
+successfully: `42` joints including the canonical root, `2,439,662` influenced
+vertices, and a valid non-empty GLB. The exporter now maps the real UniRig
+humanoid parent graph to Mixamo-compatible canonical names and rejects a
+non-humanoid graph instead of silently producing an unusable rig.
+
+## Motion-library and retarget smoke run
+
+The free Standard distribution of Quaternius Universal Animation Library 2 was
+installed through `MotionLibrary` after checking its embedded `CC0 1.0
+Universal` license. The local GLB contains `43` named actions and `65`
+humanoid bones, including idle, walk, jump, melee and sword clips. The real
+Blender retarget worker mapped its `pelvis/thigh_l/calf_l` naming to the
+canonical UniRig output, baked `Idle_No_Loop`, removed the other source
+actions, and exported a `142,578,472`-byte textured GLB. Final validation passed
+with one animation, one skin, one embedded texture, `2,440,265` influenced
+vertices and the complete canonical mapping. This proves one real clip from
+library registration through target-rig retargeting; locomotion graph blending,
+the remaining acceptance clips and visual deformation review remain open.
 
 Pixal3D's seven single-view checkpoint files total about 24.05 GB decimal,
 excluding auxiliary models, dependencies and build space. Whole-repository weight

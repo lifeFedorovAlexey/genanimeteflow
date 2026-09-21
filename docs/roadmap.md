@@ -28,11 +28,11 @@ Each checked item must have working code, automated coverage where practical, a 
 - [x] Implement real textured output and full PBR material validation (embedded extraction is implemented)
 - [x] Implement Blender retopology worker with GLB validation (UV-preserving quad mode remains gated)
 - [x] Implement UniRig worker bridge, official skeleton/skin inference and skin-weight validation (runtime requires official checkout, checkpoint and WSL CUDA)
-- [ ] Implement licensed motion library installation, normalization and catalog validation
+- [x] Implement licensed motion library installation, normalization and catalog validation (UAL2 Standard CC0 fixture: 43 clips, real local install and catalog scan)
 - [x] Add real Blender canonical-bone retarget worker with bake and GLB roundtrip validation (runtime requires Blender and installed source clips)
 - [x] Connect installed motion clips to job selection, catalog validation and the motions stage
 - [x] Connect graph evaluation endpoint to normalized Blender actions and Unit Tester state changes (full blend-tree/IK layers remain separate)
-- [ ] Implement retargeting and the canonical animation graph
+- [ ] Implement retargeting and the canonical animation graph (canonical retarget worker is real and smoke-tested; full graph blending, locomotion transitions and acceptance clips remain)
 - [ ] Implement equipment, clothing, sockets and IK validation
 - [x] Add validated local equipment manifest/catalog registration with license-independent provenance and socket/grip metadata
 - [x] Add Blender rigid-equipment socket attachment stage with output and skeleton validation (skinned clothing and IK remain separate stages)

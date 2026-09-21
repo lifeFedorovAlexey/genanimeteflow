@@ -14,7 +14,9 @@ jobs/*/geometry/
 jobs/*/textures/
 jobs/*/retopology/
 jobs/*/previews/
+jobs/*/motions/
 assets/equipment/*
+motions/installed/
 .vite-cache/
 hardware_profile.json
 *.tmp
