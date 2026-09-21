@@ -6,7 +6,8 @@ from pathlib import Path
 from threading import RLock
 
 from .config import JOBS_ROOT
-from .schemas import JobManifest, JobCreateRequest, StageName, StageRecord
+from .schemas import JobManifest, JobCreateRequest, StageName, StageRecord, StageStatus
+from .pipeline_graph import downstream
 from .storage import atomic_write_json, read_json
 
 
@@ -62,3 +63,27 @@ class JobStore:
                 except (ValueError, OSError):
                     continue
         return sorted(result, key=lambda item: item.updated_at, reverse=True)
+
+    def recover_incomplete(self) -> int:
+        recovered = 0
+        for manifest in self.list():
+            changed = False
+            for record in manifest.stages.values():
+                if record.status is StageStatus.RUNNING:
+                    record.status = StageStatus.CANCELLED
+                    record.error_category = "APP_RESTARTED"
+                    record.error_message = "Stage was interrupted because the API process restarted"
+                    changed = True
+            if changed:
+                manifest.status = "FAILED"
+                self.save(manifest)
+                recovered += 1
+        return recovered
+
+    def invalidate_from(self, manifest: JobManifest, stage: StageName) -> None:
+        for dependent in downstream(stage):
+            record = manifest.stages[dependent.value]
+            if dependent is not stage and record.status not in {StageStatus.PENDING, StageStatus.INVALIDATED}:
+                record.status = StageStatus.INVALIDATED
+                record.error_category = "UPSTREAM_CHANGED"
+                record.error_message = f"Invalidated because {stage.value} was rerun"

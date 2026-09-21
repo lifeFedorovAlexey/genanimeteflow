@@ -10,6 +10,7 @@ from PIL import Image, ImageDraw
 from app.job_store import JobStore
 from app.model_registry import ModelRegistry
 from app.process_manager import ProcessManager, WorkerFailure
+from app.pipeline_graph import downstream
 from app.reference_pipeline import assess_reference, preprocess_reference
 from app.schemas import JobCreateRequest, StageName, StageStatus
 
@@ -34,6 +35,17 @@ class FoundationTests(unittest.TestCase):
             self.assertEqual(loaded.job_id, manifest.job_id)
             self.assertEqual(loaded.stages[StageName.REFERENCES.value].status, StageStatus.PENDING)
             self.assertTrue((Path(temporary) / manifest.job_id / "references" / "original").is_dir())
+
+    def test_dependency_graph_invalidates_only_downstream_stages(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            store = JobStore(Path(temporary))
+            manifest = store.create(JobCreateRequest())
+            for stage in manifest.stages.values():
+                stage.status = StageStatus.READY
+            store.invalidate_from(manifest, StageName.GEOMETRY)
+            self.assertEqual(manifest.stages[StageName.GEOMETRY.value].status, StageStatus.READY)
+            self.assertEqual(manifest.stages[StageName.RETOPOLOGY.value].status, StageStatus.INVALIDATED)
+            self.assertEqual(downstream(StageName.GEOMETRY)[-1], StageName.EXPORT)
 
     def test_reference_preprocessing_preserves_foreground_and_reports_quality(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

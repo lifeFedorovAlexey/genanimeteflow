@@ -13,12 +13,14 @@ from .capabilities import capabilities
 from .hardware import detect_hardware
 from .job_store import JobStore
 from .model_registry import ModelRegistry
+from .pipeline_graph import STAGE_DEPENDENCIES
 from .runner import PipelineRunner, SingleGpuQueue
 from .schemas import JobCreateRequest, JobManifest, ReferenceSlot, Settings, StageName
 from .storage import atomic_write_json, read_json
 
 ensure_directories()
 store = JobStore()
+store.recover_incomplete()
 runner = PipelineRunner(store, SingleGpuQueue())
 
 app = FastAPI(title="Character Factory API", version="0.1.0")
@@ -106,8 +108,25 @@ async def run_stage(job_id: str, stage: str) -> dict[str, str]:
     except ValueError:
         raise HTTPException(status_code=400, detail=f"Unknown stage: {stage}")
     get_job(job_id)
+    try:
+        manifest = store.get(job_id)
+        for dependency in STAGE_DEPENDENCIES[stage_name]:
+            if manifest.stages[dependency.value].status.value != "READY":
+                raise HTTPException(status_code=409, detail=f"Stage '{stage}' requires READY dependency '{dependency.value}'")
+    except HTTPException:
+        raise
     asyncio.create_task(runner.run(job_id, stage_name))
     return {"status": "QUEUED", "stage": stage_name.value}
+
+
+@app.post("/api/jobs/{job_id}/stages/{stage}/cancel")
+async def cancel_stage(job_id: str, stage: str) -> dict[str, bool]:
+    try:
+        stage_name = StageName(stage)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Unknown stage: {stage}")
+    get_job(job_id)
+    return {"cancelled": await runner.cancel(job_id, stage_name)}
 
 
 @app.get("/api/jobs/{job_id}/files/{path:path}")

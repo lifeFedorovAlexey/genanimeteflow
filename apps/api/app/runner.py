@@ -10,6 +10,7 @@ from typing import Awaitable, Callable
 from .job_store import JobStore
 from .config import REPO_ROOT
 from .model_registry import ModelRegistry
+from .pipeline_graph import STAGE_DEPENDENCIES
 from .process_manager import ProcessManager, WorkerFailure
 from .reference_pipeline import assess_reference, preprocess_reference
 from .schemas import JobManifest, StageName, StageStatus
@@ -48,9 +49,22 @@ class PipelineRunner:
         key = (job_id, stage.value)
         if key in self.tasks and not self.tasks[key].done():
             raise RuntimeError("stage is already running")
+        manifest = self.store.get(job_id)
+        for dependency in STAGE_DEPENDENCIES[stage]:
+            if manifest.stages[dependency.value].status is not StageStatus.READY:
+                raise RuntimeError(f"Stage '{stage.value}' requires READY dependency '{dependency.value}'")
+        self.store.invalidate_from(manifest, stage)
+        self.store.save(manifest)
         task = asyncio.create_task(self._run(job_id, stage))
         self.tasks[key] = task
         await task
+
+    async def cancel(self, job_id: str, stage: StageName) -> bool:
+        task = self.tasks.get((job_id, stage.value))
+        if not task or task.done():
+            return False
+        task.cancel()
+        return True
 
     async def _run(self, job_id: str, stage: StageName) -> None:
         manifest = self.store.get(job_id)
