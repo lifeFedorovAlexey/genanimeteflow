@@ -12,6 +12,7 @@ from .config import REPO_ROOT
 from .model_registry import ModelRegistry
 from .pipeline_graph import STAGE_DEPENDENCIES
 from .process_manager import ProcessManager, WorkerFailure
+from tools.validation.glb import validate_glb
 from .reference_pipeline import assess_reference, preprocess_reference
 from .schemas import JobManifest, StageName, StageStatus
 
@@ -143,6 +144,9 @@ class PipelineRunner:
         logger.info("Starting official SPAR3D worker")
         result = await asyncio.to_thread(self.process_manager.run_json_worker, [sys.executable, "-m", "workers.spar3d.worker"], request, REPO_ROOT, {"SPAR3D_ROOT": str(spar3d["root"]), **({"SPAR3D_PYTHON": spar3d["python"]} if spar3d["python"] else {})}, log_path)
         mesh_path = Path(result.payload["mesh_path"])
+        report = validate_glb(mesh_path)
+        if not report.valid:
+            raise WorkerFailure("PROVIDER_OUTPUT_INVALID", "; ".join(report.errors))
         manifest.actual_provider = result.payload["provider"]
-        manifest.stages[StageName.GEOMETRY.value].result = {"mesh_path": str(mesh_path.relative_to(job_dir)), "settings": settings, "stdout": result.stdout[-4000:]}
+        manifest.stages[StageName.GEOMETRY.value].result = {"mesh_path": str(mesh_path.relative_to(job_dir)), "settings": settings, "stdout": result.stdout[-4000:], "validation": report.__dict__}
         logger.info("Generated mesh saved: %s", mesh_path)
