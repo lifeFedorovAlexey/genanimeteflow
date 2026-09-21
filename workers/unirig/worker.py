@@ -45,11 +45,12 @@ def run(request: dict) -> dict:
     if is_wsl:
         distro = os.getenv("UNIRIG_DISTRO", "Ubuntu")
         python_bin = os.getenv("UNIRIG_WSL_PYTHON", "/opt/unirig-venv/bin/python")
+        compat_root = _wsl_path(Path(__file__).resolve().parent / "compat")
 
         def command(script: Path, args: list[tuple[str, Path]]) -> list[str]:
             script_text = shlex.quote(_wsl_path(script))
             arguments = " ".join(f"{shlex.quote(flag)} {shlex.quote(_wsl_path(value))}" for flag, value in args)
-            shell_line = f"export PATH={shlex.quote(str(Path(python_bin).parent))}:$PATH; cd {shlex.quote(_wsl_path(root))} && bash {script_text} {arguments}"
+            shell_line = f"export PATH={shlex.quote(str(Path(python_bin).parent))}:$PATH; export PYTHONPATH={shlex.quote(compat_root)}:$PYTHONPATH; cd {shlex.quote(_wsl_path(root))} && bash {script_text} {arguments}"
             return [shell, "-d", distro, "--", "bash", "-lc", shell_line]
 
         commands = [
