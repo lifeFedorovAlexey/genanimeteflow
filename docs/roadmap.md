@@ -11,6 +11,7 @@ Each checked item must have working code, automated coverage where practical, a 
 - [x] Reference upload, original preservation and real preprocessing
 - [x] Structured stage logs and SSE job events
 - [x] GLB mesh validation and embedded texture extraction
+- [x] Motion catalog registration with license metadata, SHA-256 and GLB clip inspection
 - [x] Foundation tests and production web build
 
 ## Pipeline stages
@@ -21,6 +22,7 @@ Each checked item must have working code, automated coverage where practical, a 
 - [ ] Implement Blender retopology/UV worker with roundtrip checks
 - [ ] Implement UniRig worker, canonical mapping and skin-weight validation
 - [ ] Implement licensed motion library installation, normalization and catalog validation
+- [ ] Normalize registered clips onto CanonicalHumanoidRig and validate retarget output
 - [ ] Implement retargeting and the canonical animation graph
 - [ ] Implement equipment, clothing, sockets and IK validation
 - [ ] Load validated GLB assets in Unit Tester and add controls/debug views

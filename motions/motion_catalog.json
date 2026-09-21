@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "libraries": [],
+  "sources": [
+    {
+      "id": "quaternius-universal-animation-library",
+      "name": "Quaternius Universal Animation Library",
+      "url": "https://quaternius.com/packs/universalanimationlibrary.html",
+      "license": "CC0 1.0",
+      "allowed_for_commercial_use": true,
+      "notes": "Official retargetable humanoid animation pack; user must download the chosen distribution from the official page."
+    },
+    {
+      "id": "cmu-mocap",
+      "name": "CMU Graphics Lab Motion Capture Database",
+      "url": "https://mocap.cs.cmu.edu/",
+      "license": "Free use with database restrictions; do not resell the data directly",
+      "allowed_for_commercial_use": true,
+      "notes": "Record attribution and preserve source terms in every installed library manifest."
+    }
+  ]
+}

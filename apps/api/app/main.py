@@ -13,9 +13,10 @@ from .capabilities import capabilities
 from .hardware import detect_hardware
 from .job_store import JobStore
 from .model_registry import ModelRegistry
+from .motion_library import MotionLibrary, MotionLibraryError
 from .pipeline_graph import STAGE_DEPENDENCIES
 from .runner import PipelineRunner, SingleGpuQueue
-from .schemas import JobCreateRequest, JobManifest, ReferenceSlot, Settings, StageName
+from .schemas import JobCreateRequest, JobManifest, MotionRegisterRequest, ReferenceSlot, Settings, StageName
 from .storage import atomic_write_json, read_json
 
 ensure_directories()
@@ -45,6 +46,19 @@ def get_capabilities() -> dict:
 @app.get("/api/models")
 def get_models() -> list[dict]:
     return ModelRegistry().status()
+
+
+@app.get("/api/motions")
+def get_motions() -> dict:
+    return MotionLibrary().catalog()
+
+
+@app.post("/api/motions/register")
+def register_motion_library(request: MotionRegisterRequest) -> dict:
+    try:
+        return MotionLibrary().register_local(Path(request.source_path), request.library_id, request.source_id, request.license, request.allowed_for_commercial_use)
+    except (MotionLibraryError, OSError, ValueError) as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
 
 
 @app.get("/api/settings", response_model=Settings)

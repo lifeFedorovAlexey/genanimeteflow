@@ -77,3 +77,11 @@ class Settings(BaseModel):
     preferred_resolution: int = 512
     api_host: str = "127.0.0.1"
     allow_external_api: bool = False
+
+
+class MotionRegisterRequest(BaseModel):
+    source_path: str
+    library_id: str
+    source_id: str
+    license: str
+    allowed_for_commercial_use: bool = False
