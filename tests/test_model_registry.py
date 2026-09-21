@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -34,6 +35,21 @@ class ModelRegistryTests(unittest.TestCase):
         self.assertTrue(status["checkout_ready"])
         self.assertTrue(status["runtime_ready"])
         self.assertTrue(status["installed"])
+
+    def test_gated_model_access_does_not_report_installed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "spar3d"
+            root.mkdir()
+            (root / "run.py").write_text("", encoding="utf-8")
+            python = root / "python.exe"
+            python.write_text("", encoding="utf-8")
+            result = subprocess.CompletedProcess([], 0, "cuda=True\nmodel_access=http_401\n", "")
+            environment = {"TEST_SPAR3D_ROOT": str(root), "TEST_SPAR3D_PYTHON": str(python)}
+            with patch.dict(os.environ, environment, clear=True), patch("app.model_registry.subprocess.run", return_value=result):
+                status = self._registry(Path(directory)).status()[0]
+        self.assertFalse(status["installed"])
+        self.assertFalse(status["runtime_ready"])
+        self.assertIn("model terms", status["reason"])
 
 
 if __name__ == "__main__":
