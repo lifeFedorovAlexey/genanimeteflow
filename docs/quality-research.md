@@ -20,10 +20,11 @@ offload may make it possible, but this is an explicit hardware experiment, not a
 guaranteed 12 GB mode. **Hunyuan3D-Omni** is a shape/control model (including pose
 control), not a replacement for texturing, rigging or animation.
 
-The Pixal3D candidate remains useful as a quality comparator. The user has now
-submitted the official DINOv3 gating request and reports that Meta granted access;
-the local token must still be rechecked before downloading its large bundle. Do
-not silently substitute an unofficial mirror for a gated official checkpoint.
+The Pixal3D candidate remains useful as a quality comparator. Meta has granted
+the user's official DINOv3 gating request; a local token check now returns the
+user account and HTTP 200 for the gated model page. The DINOv3 weights are still
+not downloaded because Pixal3D is a comparator, not the primary production path.
+Do not silently substitute an unofficial mirror for a gated official checkpoint.
 
 ## Actual machine
 
@@ -66,9 +67,12 @@ These pins identify inspected candidates; they do **not** mean installed/working
 - Official Hunyuan3D-2.1 model card was inspected; its published memory figures are recorded above.
 
 The official Hunyuan3D-2mv checkpoint is now downloaded to the external model
-store and passed a real CUDA load preflight on the RTX 4070. The Hunyuan Paint
-Turbo UNet and remaining Delight/image-encoder weights are being staged in the
-same store; these files are intentionally excluded from Git.
+store and passed a real CUDA load preflight on the RTX 4070. The official
+single-view Hunyuan3D-2 checkpoint also passed a real CUDA load preflight with
+Torch 2.8/cu128 on the same GPU. The Hunyuan Paint Turbo UNet and remaining
+Delight/image-encoder weights are being staged in the same store; these files
+are intentionally excluded from Git. Paint is not marked ready until its
+official custom pipeline completes a local load and a real textured mesh run.
 
 Pixal3D's seven single-view checkpoint files total about 24.05 GB decimal,
 excluding auxiliary models, dependencies and build space. Whole-repository weight
