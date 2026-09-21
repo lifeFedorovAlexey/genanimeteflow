@@ -21,6 +21,7 @@ from .pipeline_graph import STAGE_DEPENDENCIES
 from .runner import PipelineRunner, SingleGpuQueue
 from .schemas import AnimationGraphRequest, EquipmentRegisterRequest, EquipmentSelectionRequest, ExportSelectionRequest, JobCreateRequest, JobManifest, MotionRegisterRequest, MotionSelectionRequest, ReferenceSlot, Settings, StageName
 from .storage import atomic_write_json, read_json
+from .schemas import StageStatus
 
 ensure_directories()
 store = JobStore()
@@ -163,18 +164,31 @@ async def upload_reference(job_id: str, view: str, file: UploadFile = File(...))
         raise HTTPException(status_code=400, detail="view must be front, left, back, or right")
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=415, detail="Only image uploads are supported")
-    manifest = get_job(job_id)
+    get_job(job_id)
     suffix = Path(file.filename or "reference.png").suffix.lower()
     if suffix not in {".png", ".jpg", ".jpeg", ".webp"}:
         raise HTTPException(status_code=415, detail="Supported image formats: PNG, JPG, WEBP")
     relative = Path("references") / "original" / f"{view}{suffix}"
     destination = store.job_dir(job_id) / relative
-    destination.parent.mkdir(parents=True, exist_ok=True)
     content = await file.read()
     if len(content) > 25 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="Reference image is larger than 25 MB")
+    # Re-read after receiving the upload: a worker may have started while the
+    # request was streaming. Never replace inputs used by an active stage.
+    manifest = get_job(job_id)
+    if any(record.status.value == "RUNNING" for record in manifest.stages.values()) or any(
+        key[0] == job_id and not task.done() for key, task in runner.tasks.items()
+    ):
+        raise HTTPException(status_code=409, detail="Cancel the running stage before replacing a reference")
+    destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_bytes(content)
     manifest.references[view] = ReferenceSlot(view=view, required=view == "front", original_path=str(relative))
+    store.invalidate_from(manifest, StageName.REFERENCES)
+    reference_stage = manifest.stages[StageName.REFERENCES.value]
+    reference_stage.status = StageStatus.INVALIDATED
+    reference_stage.error_category = "UPSTREAM_CHANGED"
+    reference_stage.error_message = f"The {view} reference changed; process references again"
+    manifest.status = "INVALIDATED"
     store.save(manifest)
     return manifest
 
