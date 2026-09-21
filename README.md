@@ -8,6 +8,12 @@ Local Character Factory foundation for Windows + NVIDIA hardware. The current re
 .\setup.ps1
 ```
 
+For WSL/Linux:
+
+```bash
+./setup.sh
+```
+
 The setup script creates `.venv`, installs the Python project dependencies, installs the web dependencies and writes `hardware_profile.json` from live machine diagnostics.
 
 ## Start

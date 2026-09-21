@@ -14,6 +14,7 @@ Each checked item must have working code, automated coverage where practical, a 
 - [x] Motion catalog registration with license metadata, SHA-256 and GLB clip inspection
 - [x] Deterministic locomotion/action graph evaluator with equipment-aware clip selection
 - [x] Foundation tests and production web build
+- [x] Windows and WSL setup scripts use the project virtual environment and report Blender availability
 
 ## Pipeline stages
 

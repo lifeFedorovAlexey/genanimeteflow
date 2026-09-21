@@ -9,5 +9,6 @@ $venvPython = Join-Path $Root ".venv\Scripts\python.exe"
 & $venvPython -m pip install -e ".[dev]"
 Push-Location (Join-Path $Root "apps/web"); npm install; Pop-Location
 $env:PYTHONPATH = Join-Path $Root "apps/api"
-python -c "from app.hardware import detect_hardware; import json; print(json.dumps(detect_hardware(), indent=2))"
+if (-not (Get-Command blender -ErrorAction SilentlyContinue)) { Write-Host "Blender: not installed; Blender-dependent stages will remain unavailable" -ForegroundColor Yellow } else { Write-Host "Blender: available" -ForegroundColor Green }
+& $venvPython -c "from app.hardware import detect_hardware; import json; print(json.dumps(detect_hardware(), indent=2))"
 Write-Host "Setup complete. Run .\start.ps1" -ForegroundColor Green
