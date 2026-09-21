@@ -4,6 +4,7 @@ Each checked item must have working code, automated coverage where practical, a 
 
 ## Product UX acceptance
 
+- [ ] Implement the user-approved [workspace design brief](ui-design-brief.md): input/settings on the left, dominant 3D viewport in the center, real result gallery on the right, without billing or promotional UI. This is an acceptance requirement, not a claim that the current UI matches it.
 - [ ] The interface must be understandable without a manual: each screen makes the next action, current progress, blocking reason and successful result visually obvious. Technical status text is secondary; controls use real user actions instead of generic labels such as `Run`.
 
 ## Foundation
