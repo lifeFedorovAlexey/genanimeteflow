@@ -351,7 +351,16 @@ class PipelineRunner:
         output_dir = job_dir / "rig"
         request = {"source_mesh": str(source_mesh), "output_dir": str(output_dir)}
         unirig_root = os.getenv("UNIRIG_ROOT")
-        env = {"UNIRIG_ROOT": unirig_root} if unirig_root else {}
+        env = {
+            key: value
+            for key, value in {
+                "UNIRIG_ROOT": unirig_root,
+                "UNIRIG_BASH": os.getenv("UNIRIG_BASH"),
+                "UNIRIG_DISTRO": os.getenv("UNIRIG_DISTRO"),
+                "UNIRIG_WSL_PYTHON": os.getenv("UNIRIG_WSL_PYTHON"),
+            }.items()
+            if value
+        }
         logger.info("Starting official UniRig worker")
         result = await asyncio.to_thread(self.process_manager.run_json_worker, [sys.executable, "-m", "workers.unirig.worker"], request, REPO_ROOT, env, log_path, process_key=f"{manifest.job_id}:{StageName.RIG.value}")
         rigged_mesh = Path(result.payload["rigged_mesh"])

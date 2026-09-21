@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 import os
+import shlex
 import shutil
 import subprocess
 from pathlib import Path
 
 from workers.common.worker_protocol import read_request, write_result
+
+
+def _wsl_path(path: Path) -> str:
+    drive = path.drive.rstrip(":").lower()
+    return f"/mnt/{drive}{path.as_posix()[2:]}"
 
 
 def _run(command: list[str], cwd: Path) -> tuple[int, str, str]:
@@ -35,11 +41,28 @@ def run(request: dict) -> dict:
     skeleton = output_dir / "skeleton.fbx"
     skin = output_dir / "skin.fbx"
     rigged = output_dir / "rigged.glb"
-    commands = [
-        [shell, str(skeleton_script), "--input", str(source), "--output", str(skeleton)],
-        [shell, str(skin_script), "--input", str(skeleton), "--output", str(skin)],
-        [shell, str(merge_script), "--source", str(skin), "--target", str(source), "--output", str(rigged)],
-    ]
+    is_wsl = Path(shell).name.lower() in {"wsl", "wsl.exe"}
+    if is_wsl:
+        distro = os.getenv("UNIRIG_DISTRO", "Ubuntu")
+        python_bin = os.getenv("UNIRIG_WSL_PYTHON", "/opt/unirig-venv/bin/python")
+
+        def command(script: Path, args: list[tuple[str, Path]]) -> list[str]:
+            script_text = shlex.quote(_wsl_path(script))
+            arguments = " ".join(f"{shlex.quote(flag)} {shlex.quote(_wsl_path(value))}" for flag, value in args)
+            shell_line = f"export PATH={shlex.quote(str(Path(python_bin).parent))}:$PATH; cd {shlex.quote(_wsl_path(root))} && bash {script_text} {arguments}"
+            return [shell, "-d", distro, "--", "bash", "-lc", shell_line]
+
+        commands = [
+            command(skeleton_script, [("--input", source), ("--output", skeleton)]),
+            command(skin_script, [("--input", skeleton), ("--output", skin)]),
+            command(merge_script, [("--source", skin), ("--target", source), ("--output", rigged)]),
+        ]
+    else:
+        commands = [
+            [shell, str(skeleton_script), "--input", str(source), "--output", str(skeleton)],
+            [shell, str(skin_script), "--input", str(skeleton), "--output", str(skin)],
+            [shell, str(merge_script), "--source", str(skin), "--target", str(source), "--output", str(rigged)],
+        ]
     logs: list[dict] = []
     for command in commands:
         return_code, stdout, stderr = _run(command, root)
