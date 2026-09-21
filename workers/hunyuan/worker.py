@@ -57,7 +57,7 @@ def run(request: dict) -> dict:
         category = "FAILED_OOM" if "out of memory" in combined.lower() or "cuda out of memory" in combined.lower() else "PROVIDER_ERROR"
         return {"ok": False, "category": category, "error": f"Hunyuan3D worker exited with code {completed.returncode}", "stdout": completed.stdout, "stderr": completed.stderr}
     try:
-        result = __import__("json").loads(completed.stdout)
+        result = _last_json_object(completed.stdout)
     except ValueError:
         return {"ok": False, "category": "WORKER_PROTOCOL", "error": "Hunyuan inference did not return JSON", "stdout": completed.stdout, "stderr": completed.stderr}
     if not result.get("ok"):
@@ -68,6 +68,22 @@ def run(request: dict) -> dict:
     provider = "HunyuanMultiviewProvider" if str(request.get("settings", {}).get("model_id", "")).endswith("2mv") else "HunyuanSingleViewProvider"
     result.update(provider=provider, ignored_views=ignored_views, stdout=completed.stdout, stderr=completed.stderr)
     return result
+
+
+def _last_json_object(output: str) -> dict:
+    import json
+
+    for line in reversed(output.splitlines()):
+        candidate = line.strip()
+        if not candidate:
+            continue
+        try:
+            value = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict):
+            return value
+    raise ValueError("No JSON object found in worker output")
 
 
 def _request_for_inference(request: dict, images: dict[str, str], output_dir: Path) -> str:

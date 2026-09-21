@@ -40,8 +40,9 @@ def run(request: dict) -> dict:
             return {"ok": False, "category": "INPUT_INVALID", "error": "Input GLB contains no triangle mesh"}
         loaded = trimesh.util.concatenate(meshes)
     pipeline = Hunyuan3DPaintPipeline.from_pretrained(request["model_path"] or request["model_id"])
-    if request.get("low_vram_mode") and hasattr(pipeline, "enable_model_cpu_offload"):
-        pipeline.enable_model_cpu_offload()
+    # Tencent's Paint wrapper is a custom pipeline, not a diffusers Pipeline;
+    # its similarly named offload helper expects a ``components`` mapping that
+    # does not exist. Device placement is handled by the official pipeline.
     started = time.perf_counter()
     textured = pipeline(loaded, image=Image.open(request["image"]).convert("RGBA"))
     output_path = Path(request["output_mesh"])

@@ -21,19 +21,18 @@ def run(request: dict) -> dict:
         return {"ok": False, "category": "CUDA_UNAVAILABLE", "error": "Hunyuan Python cannot access CUDA"}
     image_paths = request["images"]
     images = {view: Image.open(path).convert("RGBA") for view, path in image_paths.items()}
-    model_id = request["model_path"] or request["model_id"]
+    model_path = request["model_path"] or request["model_id"]
     subfolder = request["subfolder"]
-    pipeline_kwargs = {
-        "pretrained_model_name_or_path": model_id,
-        "subfolder": subfolder,
-        "use_safetensors": True,
-        "device": "cuda",
-    }
     pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(
-        **pipeline_kwargs,
+        model_path,
+        subfolder=subfolder,
+        use_safetensors=True,
+        device="cuda",
     )
-    if request.get("low_vram_mode") and hasattr(pipeline, "enable_model_cpu_offload"):
-        pipeline.enable_model_cpu_offload()
+    # The official Hunyuan pipeline is not a diffusers Pipeline object.  Its
+    # similarly named offload helper is not available and would dereference a
+    # nonexistent ``components`` mapping.  Device placement is handled by the
+    # official ``device`` argument above.
     generator = torch.Generator(device="cuda").manual_seed(int(request.get("seed", 42)))
     started = time.perf_counter()
     pipeline_image = images if len(images) > 1 else images["front"]

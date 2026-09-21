@@ -42,7 +42,7 @@ def run(request: dict) -> dict:
         category = "FAILED_OOM" if "out of memory" in combined.lower() else "PROVIDER_ERROR"
         return {"ok": False, "category": category, "error": f"Hunyuan Paint worker exited with code {completed.returncode}", "stdout": completed.stdout, "stderr": completed.stderr}
     try:
-        result = json.loads(completed.stdout)
+        result = _last_json_object(completed.stdout)
     except ValueError:
         return {"ok": False, "category": "WORKER_PROTOCOL", "error": "Hunyuan Paint did not return JSON", "stdout": completed.stdout, "stderr": completed.stderr}
     if not result.get("ok"):
@@ -52,6 +52,20 @@ def run(request: dict) -> dict:
         return {"ok": False, "category": "PROVIDER_OUTPUT_INVALID", "error": f"Hunyuan Paint did not produce a non-empty GLB: {output_path}"}
     result.update(provider="HunyuanPaintProvider", stdout=completed.stdout, stderr=completed.stderr)
     return result
+
+
+def _last_json_object(output: str) -> dict:
+    for line in reversed(output.splitlines()):
+        candidate = line.strip()
+        if not candidate:
+            continue
+        try:
+            value = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict):
+            return value
+    raise ValueError("No JSON object found in worker output")
 
 
 if __name__ == "__main__":
