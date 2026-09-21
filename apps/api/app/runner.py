@@ -190,7 +190,11 @@ class PipelineRunner:
                 result = await asyncio.to_thread(
                     self.process_manager.run_json_worker,
                     [sys.executable, "-m", "workers.hunyuan.worker"], request, REPO_ROOT,
-                    {"HUNYUAN_ROOT": str(hunyuan["root"]), "HUNYUAN_PYTHON": str(hunyuan["python"])},
+                    {
+                        "HUNYUAN_ROOT": str(hunyuan["root"]),
+                        "HUNYUAN_PYTHON": str(hunyuan["python"]),
+                        "HUNYUAN_SHAPE_MODEL_PATH": os.getenv("HUNYUAN_SHAPE_MODEL_PATH", ""),
+                    },
                     log_path, process_key=f"{manifest.job_id}:{StageName.GEOMETRY.value}",
                 )
             finally:
@@ -281,7 +285,19 @@ class PipelineRunner:
             textured_mesh = job_dir / "textures" / "hunyuan-paint" / "textured.glb"
             texture_request = {"mesh_path": str(mesh_path), "image": str(job_dir / front.processed_path), "output_mesh": str(textured_mesh), "texture_resolution": 1024, "low_vram_mode": manifest.profile.upper() != "MAX"}
             logger.info("Starting official Hunyuan Paint worker")
-            result = await asyncio.to_thread(self.process_manager.run_json_worker, [sys.executable, "-m", "workers.hunyuan.texture_worker"], texture_request, REPO_ROOT, {"HUNYUAN_ROOT": str(hunyuan["root"]), "HUNYUAN_PYTHON": str(hunyuan["python"])}, job_dir / "logs" / "textures_paint.log", process_key=f"{manifest.job_id}:{StageName.TEXTURES.value}")
+            result = await asyncio.to_thread(
+                self.process_manager.run_json_worker,
+                [sys.executable, "-m", "workers.hunyuan.texture_worker"],
+                texture_request,
+                REPO_ROOT,
+                {
+                    "HUNYUAN_ROOT": str(hunyuan["root"]),
+                    "HUNYUAN_PYTHON": str(hunyuan["python"]),
+                    "HUNYUAN_PAINT_MODEL_PATH": os.getenv("HUNYUAN_PAINT_MODEL_PATH", ""),
+                },
+                job_dir / "logs" / "textures_paint.log",
+                process_key=f"{manifest.job_id}:{StageName.TEXTURES.value}",
+            )
             painted = Path(result.payload["mesh_path"])
             paint_report = validate_glb(painted)
             if not paint_report.valid:

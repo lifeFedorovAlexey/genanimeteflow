@@ -77,6 +77,7 @@ def _request_for_inference(request: dict, images: dict[str, str], output_dir: Pa
         "images": images,
         "output_dir": str(output_dir),
         "model_id": str(settings.get("model_id", "tencent/Hunyuan3D-2mv")),
+        "model_path": os.getenv("HUNYUAN_SHAPE_MODEL_PATH", ""),
         "subfolder": str(settings.get("subfolder", "hunyuan3d-dit-v2-mv")),
         "steps": int(settings.get("steps", 30)),
         "octree_resolution": int(settings.get("octree_resolution", 380)),

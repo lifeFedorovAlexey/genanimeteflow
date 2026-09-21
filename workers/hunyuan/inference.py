@@ -21,13 +21,16 @@ def run(request: dict) -> dict:
         return {"ok": False, "category": "CUDA_UNAVAILABLE", "error": "Hunyuan Python cannot access CUDA"}
     image_paths = request["images"]
     images = {view: Image.open(path).convert("RGBA") for view, path in image_paths.items()}
-    model_id = request["model_id"]
+    model_id = request["model_path"] or request["model_id"]
     subfolder = request["subfolder"]
+    pipeline_kwargs = {
+        "pretrained_model_name_or_path": model_id,
+        "subfolder": subfolder,
+        "use_safetensors": True,
+        "device": "cuda",
+    }
     pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(
-        model_id,
-        subfolder=subfolder,
-        use_safetensors=True,
-        device="cuda",
+        **pipeline_kwargs,
     )
     if request.get("low_vram_mode") and hasattr(pipeline, "enable_model_cpu_offload"):
         pipeline.enable_model_cpu_offload()

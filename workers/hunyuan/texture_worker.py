@@ -32,6 +32,7 @@ def run(request: dict) -> dict:
         "image": str(image),
         "output_mesh": str(output),
         "model_id": str(request.get("model_id", "tencent/Hunyuan3D-2")),
+        "model_path": os.getenv("HUNYUAN_PAINT_MODEL_PATH", ""),
         "texture_resolution": int(request.get("texture_resolution", 1024)),
         "low_vram_mode": bool(request.get("low_vram_mode", True)),
     }

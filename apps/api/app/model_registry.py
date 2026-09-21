@@ -104,19 +104,26 @@ except Exception as error:
             return cached[1]
         probe = """
 import os
+from pathlib import Path
 import torch
 from hy3dgen.shapegen import Hunyuan3DDiTFlowMatchingPipeline
 from huggingface_hub import hf_hub_download
 print('cuda=' + str(torch.cuda.is_available()))
 try:
-    hf_hub_download(os.environ['CF_MODEL_ID'], filename=os.environ['CF_MODEL_CONFIG'], local_files_only=True)
-    hf_hub_download(os.environ['CF_MODEL_ID'], filename=os.environ['CF_MODEL_WEIGHTS'], local_files_only=True)
-    print('weights=local')
+    local_root = Path(os.environ.get('CF_MODEL_PATH', ''))
+    local_config = local_root / os.environ['CF_MODEL_CONFIG']
+    local_weights = local_root / os.environ['CF_MODEL_WEIGHTS']
+    if local_config.is_file() and local_weights.is_file() and local_weights.stat().st_size > 0:
+        print('weights=local_path')
+    else:
+        hf_hub_download(os.environ['CF_MODEL_ID'], filename=os.environ['CF_MODEL_CONFIG'], local_files_only=True)
+        hf_hub_download(os.environ['CF_MODEL_ID'], filename=os.environ['CF_MODEL_WEIGHTS'], local_files_only=True)
+        print('weights=local_cache')
 except Exception as error:
     print('weights=' + type(error).__name__)
 """
         environment = os.environ.copy()
-        environment.update({"CF_MODEL_ID": model.model_id, "CF_MODEL_CONFIG": model.fields["model_config"], "CF_MODEL_WEIGHTS": model.fields["model_weights"]})
+        environment.update({"CF_MODEL_ID": model.model_id, "CF_MODEL_CONFIG": model.fields["model_config"], "CF_MODEL_WEIGHTS": model.fields["model_weights"], "CF_MODEL_PATH": os.getenv("HUNYUAN_SHAPE_MODEL_PATH", "")})
         try:
             completed = subprocess.run([str(python_executable), "-c", probe], cwd=root, env=environment, capture_output=True, text=True, timeout=20, check=False)
         except (OSError, subprocess.SubprocessError) as error:
@@ -128,7 +135,7 @@ except Exception as error:
                 status = {"ready": False, "reason": f"Hunyuan dependencies are not ready: {last_line}"}
             elif "cuda=True" not in completed.stdout:
                 status = {"ready": False, "reason": "Hunyuan Python cannot use CUDA; install a CUDA-enabled PyTorch build"}
-            elif "weights=local" not in completed.stdout:
+            elif not any(line.startswith("weights=local") for line in completed.stdout.splitlines()):
                 status = {"ready": False, "reason": f"Hunyuan code is ready but {model.model_id} weights are not cached locally", "weights_ready": False}
             else:
                 status = {"ready": True, "reason": None, "weights_ready": True}

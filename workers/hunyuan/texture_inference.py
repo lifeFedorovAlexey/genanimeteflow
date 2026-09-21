@@ -25,7 +25,7 @@ def run(request: dict) -> dict:
         if not meshes:
             return {"ok": False, "category": "INPUT_INVALID", "error": "Input GLB contains no triangle mesh"}
         loaded = trimesh.util.concatenate(meshes)
-    pipeline = Hunyuan3DPaintPipeline.from_pretrained(request["model_id"])
+    pipeline = Hunyuan3DPaintPipeline.from_pretrained(request["model_path"] or request["model_id"])
     if request.get("low_vram_mode") and hasattr(pipeline, "enable_model_cpu_offload"):
         pipeline.enable_model_cpu_offload()
     started = time.perf_counter()
