@@ -13,6 +13,7 @@ from .model_registry import ModelRegistry
 from .pipeline_graph import STAGE_DEPENDENCIES
 from .process_manager import ProcessManager, WorkerFailure
 from tools.validation.glb import validate_glb
+from .vram_monitor import VramMonitor
 from .reference_pipeline import assess_reference, preprocess_reference
 from .schemas import JobManifest, StageName, StageStatus
 
@@ -140,13 +141,37 @@ class PipelineRunner:
         job_dir = self.store.job_dir(manifest.job_id)
         output_dir = job_dir / "geometry" / "spar3d"
         settings = {"texture_resolution": 1024, "low_vram_mode": manifest.profile == "SAFE", "remesh": "none"}
-        request = {"image": str(job_dir / front.processed_path), "output_dir": str(output_dir), "settings": settings}
-        logger.info("Starting official SPAR3D worker")
-        result = await asyncio.to_thread(self.process_manager.run_json_worker, [sys.executable, "-m", "workers.spar3d.worker"], request, REPO_ROOT, {"SPAR3D_ROOT": str(spar3d["root"]), **({"SPAR3D_PYTHON": spar3d["python"]} if spar3d["python"] else {})}, log_path)
+        retry_history: list[dict] = []
+        result = None
+        vram_metrics: dict = {}
+        for attempt in range(3):
+            attempt_log = log_path.with_name(f"geometry_attempt_{attempt + 1}.log")
+            request = {"image": str(job_dir / front.processed_path), "output_dir": str(output_dir / f"attempt_{attempt + 1}"), "settings": settings}
+            logger.info("Starting official SPAR3D worker, attempt %s, settings=%s", attempt + 1, settings)
+            monitor = VramMonitor()
+            before = monitor.snapshot()
+            monitor.start()
+            try:
+                result = await asyncio.to_thread(self.process_manager.run_json_worker, [sys.executable, "-m", "workers.spar3d.worker"], request, REPO_ROOT, {"SPAR3D_ROOT": str(spar3d["root"]), **({"SPAR3D_PYTHON": spar3d["python"]} if spar3d["python"] else {})}, attempt_log)
+            except WorkerFailure as error:
+                metrics = monitor.stop()
+                metrics["before"] = before or metrics.get("before")
+                retry_history.append({"attempt": attempt + 1, "settings": settings.copy(), "category": error.category, "message": str(error), "vram": metrics})
+                if error.category != "FAILED_OOM" or attempt >= 2:
+                    raise WorkerFailure(error.category, f"{error}; retry_history={retry_history}") from error
+                settings = {**settings, "low_vram_mode": True, "texture_resolution": max(384, int(settings["texture_resolution"]) // 2)}
+                logger.warning("CUDA OOM; retrying with downgraded settings=%s", settings)
+                continue
+            else:
+                vram_metrics = monitor.stop()
+                vram_metrics["before"] = before or vram_metrics.get("before")
+                break
+        if result is None:
+            raise WorkerFailure("WORKER_ERROR", "Geometry worker completed without a result")
         mesh_path = Path(result.payload["mesh_path"])
         report = validate_glb(mesh_path)
         if not report.valid:
             raise WorkerFailure("PROVIDER_OUTPUT_INVALID", "; ".join(report.errors))
         manifest.actual_provider = result.payload["provider"]
-        manifest.stages[StageName.GEOMETRY.value].result = {"mesh_path": str(mesh_path.relative_to(job_dir)), "settings": settings, "stdout": result.stdout[-4000:], "validation": report.__dict__}
+        manifest.stages[StageName.GEOMETRY.value].result = {"mesh_path": str(mesh_path.relative_to(job_dir)), "settings": settings, "retry_history": retry_history, "vram": vram_metrics, "stdout": result.stdout[-4000:], "validation": report.__dict__}
         logger.info("Generated mesh saved: %s", mesh_path)
