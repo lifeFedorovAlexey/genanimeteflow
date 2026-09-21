@@ -167,8 +167,51 @@ class PipelineRunner:
         front = manifest.references.get("front")
         if not front or not front.processed_path:
             raise RuntimeError("FRONT reference is required for geometry")
-        spar3d = next(item for item in self.models.status() if item["id"] == "spar3d")
+        models = {item["id"]: item for item in self.models.status()}
+        processed = {slot.view: str(self.store.job_dir(manifest.job_id) / slot.processed_path) for slot in manifest.references.values() if slot.processed_path}
+        requested = manifest.requested_provider
+        hunyuan = models.get("hunyuan3d-2mv", {"installed": False, "reason": "Hunyuan3D-2mv is not configured"})
+        spar3d = models.get("spar3d", {"installed": False, "reason": "SPAR3D is not configured"})
+        use_hunyuan = requested == "HunyuanMultiviewProvider" or (requested == "AUTO" and len(processed) >= 2 and bool(hunyuan["installed"]))
+        if use_hunyuan:
+            if not hunyuan["installed"]:
+                raise WorkerFailure("MODEL_MISSING", str(hunyuan["reason"]))
+            if len(processed) < 2:
+                raise WorkerFailure("INPUT_UNSUPPORTED", "Hunyuan3D-2mv requires FRONT plus at least one additional processed view")
+            job_dir = self.store.job_dir(manifest.job_id)
+            output_dir = job_dir / "geometry" / "hunyuan3d-2mv"
+            settings = {"steps": 30, "octree_resolution": 380, "num_chunks": 20000, "seed": 42, "low_vram_mode": manifest.profile.upper() != "MAX"}
+            request = {"images": processed, "output_dir": str(output_dir), "settings": settings}
+            logger.info("Starting official Hunyuan3D-2mv worker with %s views", len(processed))
+            monitor = VramMonitor()
+            before = monitor.snapshot()
+            monitor.start()
+            try:
+                result = await asyncio.to_thread(
+                    self.process_manager.run_json_worker,
+                    [sys.executable, "-m", "workers.hunyuan.worker"], request, REPO_ROOT,
+                    {"HUNYUAN_ROOT": str(hunyuan["root"]), "HUNYUAN_PYTHON": str(hunyuan["python"])},
+                    log_path, process_key=f"{manifest.job_id}:{StageName.GEOMETRY.value}",
+                )
+            finally:
+                vram = monitor.stop()
+                vram["before"] = before or vram.get("before")
+            mesh_path = Path(result.payload["mesh_path"])
+            report = validate_glb(mesh_path)
+            if not report.valid:
+                raise WorkerFailure("PROVIDER_OUTPUT_INVALID", "; ".join(report.errors))
+            manifest.actual_provider = "HunyuanMultiviewProvider"
+            ignored = result.payload.get("ignored_views", [])
+            if ignored:
+                manifest.warnings.append("Hunyuan3D-2mv currently consumes FRONT/LEFT/BACK; RIGHT was retained but not passed to this provider")
+            manifest.stages[StageName.GEOMETRY.value].result = {"mesh_path": str(mesh_path.relative_to(job_dir)), "settings": settings, "vram": vram, "provider_views": sorted(processed), "stdout": result.stdout[-4000:], "validation": report.__dict__}
+            logger.info("Generated multiview mesh saved: %s", mesh_path)
+            return
+        if requested == "HunyuanMultiviewProvider":
+            raise WorkerFailure("MODEL_MISSING", str(hunyuan["reason"]))
         if not spar3d["installed"]:
+            if requested == "AUTO" and hunyuan["installed"]:
+                raise WorkerFailure("INPUT_UNSUPPORTED", "Hunyuan3D-2mv is installed but needs at least two processed views; add LEFT, BACK or RIGHT")
             raise WorkerFailure("MODEL_MISSING", str(spar3d["reason"]))
         job_dir = self.store.job_dir(manifest.job_id)
         output_dir = job_dir / "geometry" / "spar3d"

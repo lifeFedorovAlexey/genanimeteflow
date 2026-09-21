@@ -21,6 +21,9 @@
       "license": "Tencent Hunyuan 3D 2.0 Community License; territory and commercial terms apply",
       "worker_root_env": "HUNYUAN_ROOT",
       "python_env": "HUNYUAN_PYTHON",
+      "checkout_markers": ["hy3dgen/shapegen/__init__.py"],
+      "model_config": "hunyuan3d-dit-v2-mv/config.yaml",
+      "model_weights": "hunyuan3d-dit-v2-mv/model.fp16.safetensors",
       "expected_vram_gb": { "shape": 6.0, "shape_and_texture": 16.0 },
       "official_options": { "low_vram": "--low_vram_mode", "model_path": "--model_path", "subfolder": "--subfolder" }
     },

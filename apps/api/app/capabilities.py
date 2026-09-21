@@ -14,19 +14,20 @@ def capabilities() -> dict:
     blender = blender_path()
     models = ModelRegistry().status()
     spar3d = next(item for item in models if item["id"] == "spar3d")
+    hunyuan = next(item for item in models if item["id"] == "hunyuan3d-2mv")
     unirig_root = os.getenv("UNIRIG_ROOT")
     unirig_ready = bool(unirig_root and all((Path(unirig_root) / relative).is_file() for relative in ("launch/inference/generate_skeleton.sh", "launch/inference/generate_skin.sh", "launch/inference/merge.sh")))
     motion_clips = MotionLibrary().clips()
     equipment_assets = EquipmentLibrary().catalog().get("assets", [])
     return {
         "providers": {
-            "AUTO": {"available": spar3d["installed"], "reason": None if spar3d["installed"] else spar3d["reason"]},
-            "HunyuanMultiviewProvider": {"available": False, "reason": "The multiview worker is not enabled until its official checkout and model weights are installed"},
+            "AUTO": {"available": spar3d["installed"] or hunyuan["installed"], "reason": None if spar3d["installed"] or hunyuan["installed"] else f"SPAR3D: {spar3d['reason']}; Hunyuan3D-2mv: {hunyuan['reason']}"},
+            "HunyuanMultiviewProvider": {"available": hunyuan["installed"], "reason": None if hunyuan["installed"] else hunyuan["reason"]},
             "Spar3DProvider": {"available": spar3d["installed"], "reason": None if spar3d["installed"] else spar3d["reason"]},
         },
         "stages": {
             "references": {"available": True, "description": "Validate, crop, alpha-process, normalize and persist reference images"},
-            "geometry": {"available": spar3d["installed"], "reason": None if spar3d["installed"] else spar3d["reason"]},
+            "geometry": {"available": spar3d["installed"] or hunyuan["installed"], "reason": None if spar3d["installed"] or hunyuan["installed"] else f"SPAR3D: {spar3d['reason']}; Hunyuan3D-2mv: {hunyuan['reason']}"},
             "textures": {"available": True, "reason": "Runs after a generated mesh and extracts only real embedded textures"},
             "retopology": {"available": bool(blender), "description": "Blender GLB import, triangle decimation and export" if blender else None, "reason": None if blender else "Blender is not installed"},
             "rig": {"available": unirig_ready, "reason": None if unirig_ready else "Configure UNIRIG_ROOT with the official UniRig inference scripts and checkpoint"},

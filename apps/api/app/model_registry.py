@@ -94,6 +94,47 @@ except Exception as error:
         _RUNTIME_STATUS_CACHE[cache_key] = (now, status)
         return status
 
+    @staticmethod
+    def _runtime_status_hunyuan(root: Path, python_executable: Path, model: ModelSpec) -> dict[str, object]:
+        """Probe only the isolated runtime and local model cache; never download."""
+        cache_key = (f"{model.id}:{root}", str(python_executable))
+        cached = _RUNTIME_STATUS_CACHE.get(cache_key)
+        now = time.monotonic()
+        if cached and now - cached[0] < _RUNTIME_STATUS_TTL_SECONDS:
+            return cached[1]
+        probe = """
+import os
+import torch
+from hy3dgen.shapegen import Hunyuan3DDiTFlowMatchingPipeline
+from huggingface_hub import hf_hub_download
+print('cuda=' + str(torch.cuda.is_available()))
+try:
+    hf_hub_download(os.environ['CF_MODEL_ID'], filename=os.environ['CF_MODEL_CONFIG'], local_files_only=True)
+    hf_hub_download(os.environ['CF_MODEL_ID'], filename=os.environ['CF_MODEL_WEIGHTS'], local_files_only=True)
+    print('weights=local')
+except Exception as error:
+    print('weights=' + type(error).__name__)
+"""
+        environment = os.environ.copy()
+        environment.update({"CF_MODEL_ID": model.model_id, "CF_MODEL_CONFIG": model.fields["model_config"], "CF_MODEL_WEIGHTS": model.fields["model_weights"]})
+        try:
+            completed = subprocess.run([str(python_executable), "-c", probe], cwd=root, env=environment, capture_output=True, text=True, timeout=20, check=False)
+        except (OSError, subprocess.SubprocessError) as error:
+            status = {"ready": False, "reason": f"Hunyuan environment could not start: {error}"}
+        else:
+            output = f"{completed.stdout}\n{completed.stderr}".strip()
+            if completed.returncode != 0:
+                last_line = next((line.strip() for line in reversed(output.splitlines()) if line.strip()), "unknown import failure")
+                status = {"ready": False, "reason": f"Hunyuan dependencies are not ready: {last_line}"}
+            elif "cuda=True" not in completed.stdout:
+                status = {"ready": False, "reason": "Hunyuan Python cannot use CUDA; install a CUDA-enabled PyTorch build"}
+            elif "weights=local" not in completed.stdout:
+                status = {"ready": False, "reason": f"Hunyuan code is ready but {model.model_id} weights are not cached locally", "weights_ready": False}
+            else:
+                status = {"ready": True, "reason": None, "weights_ready": True}
+        _RUNTIME_STATUS_CACHE[cache_key] = (now, status)
+        return status
+
     def status(self) -> list[dict]:
         result = []
         for model in self._models:
@@ -101,14 +142,15 @@ except Exception as error:
             root = Path(root_value).expanduser() if root_value else None
             python_value = os.getenv(model.python_env, "")
             python_executable = Path(python_value).expanduser() if python_value else None
-            checkout_ready = bool(root and root.is_dir() and (root / "run.py").is_file())
+            markers = model.fields.get("checkout_markers", ["run.py"])
+            checkout_ready = bool(root and root.is_dir() and all((root / marker).is_file() for marker in markers))
             runtime: dict[str, object] = {"ready": False, "reason": None}
             if checkout_ready and python_executable and python_executable.is_file():
-                runtime = self._runtime_status(root, python_executable)
+                runtime = self._runtime_status_hunyuan(root, python_executable, model) if model.id == "hunyuan3d-2mv" else self._runtime_status(root, python_executable)
             if not root_value:
                 reason = f"Set {model.worker_root_env} to the official checkout"
             elif not checkout_ready:
-                reason = f"Official checkout is incomplete: run.py was not found under {root}"
+                reason = f"Official checkout is incomplete: required files were not found under {root}"
             elif not python_value:
                 reason = f"Set {model.python_env} to the isolated Python executable"
             elif not python_executable or not python_executable.is_file():
