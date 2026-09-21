@@ -53,9 +53,17 @@ from transparent_background import Remover
 from spar3d.system import SPAR3D
 print('cuda=' + str(torch.cuda.is_available()))
 try:
-    from huggingface_hub import get_hf_file_metadata, hf_hub_url
-    get_hf_file_metadata(hf_hub_url('stabilityai/stable-point-aware-3d', 'model.safetensors'), timeout=10)
-    print('model_access=ok')
+    from huggingface_hub import get_hf_file_metadata, hf_hub_download, hf_hub_url
+    try:
+        cached = hf_hub_download(
+            'stabilityai/stable-point-aware-3d',
+            filename='model.safetensors',
+            local_files_only=True,
+        )
+        print('model_access=local_cache:' + str(os.path.getsize(cached)))
+    except Exception:
+        get_hf_file_metadata(hf_hub_url('stabilityai/stable-point-aware-3d', 'model.safetensors'), timeout=10)
+        print('model_access=ok')
 except Exception as error:
     response = getattr(error, 'response', None)
     status_code = getattr(response, 'status_code', None)
@@ -73,7 +81,7 @@ except Exception as error:
                 status = {"ready": False, "reason": f"SPAR3D dependencies are not ready: {last_line}"}
             elif "cuda=True" not in completed.stdout:
                 status = {"ready": False, "reason": "SPAR3D Python cannot use CUDA; install a CUDA-enabled PyTorch build"}
-            elif "model_access=ok" not in completed.stdout:
+            elif not any(line.startswith("model_access=ok") or line.startswith("model_access=local_cache:") for line in completed.stdout.splitlines()):
                 access_line = next((line.strip() for line in completed.stdout.splitlines() if line.startswith("model_access=")), "model_access=unknown")
                 if access_line == "model_access=http_401" or access_line == "model_access=http_403":
                     reason = "Accept the SPAR3D model terms and run huggingface-cli login in the SPAR3D environment"
@@ -81,7 +89,8 @@ except Exception as error:
                     reason = f"SPAR3D model access check failed: {access_line.removeprefix('model_access=')}"
                 status = {"ready": False, "reason": reason, "model_access": access_line.removeprefix("model_access=")}
             else:
-                status = {"ready": True, "reason": None, "model_access": "ok"}
+                access_line = next((line.strip() for line in completed.stdout.splitlines() if line.startswith("model_access=")), "model_access=ok")
+                status = {"ready": True, "reason": None, "model_access": access_line.removeprefix("model_access=")}
         _RUNTIME_STATUS_CACHE[cache_key] = (now, status)
         return status
 
