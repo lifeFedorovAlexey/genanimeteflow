@@ -18,7 +18,7 @@ def capabilities() -> dict:
         "stages": {
             "references": {"available": True, "description": "Validate, crop, alpha-process, normalize and persist reference images"},
             "geometry": {"available": spar3d["installed"], "reason": None if spar3d["installed"] else spar3d["reason"]},
-            "textures": {"available": False, "reason": "Depends on a generated mesh and a real texture provider"},
+            "textures": {"available": True, "reason": "Runs after a generated mesh and extracts only real embedded textures"},
             "retopology": {"available": False, "reason": "Blender is not installed" if not blender else "Retopology worker is not configured"},
             "rig": {"available": False, "reason": "UniRig worker and model weights are not installed"},
             "motions": {"available": False, "reason": "Motion library has not been installed"},

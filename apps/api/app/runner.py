@@ -12,7 +12,7 @@ from .config import REPO_ROOT
 from .model_registry import ModelRegistry
 from .pipeline_graph import STAGE_DEPENDENCIES
 from .process_manager import ProcessManager, WorkerFailure
-from tools.validation.glb import validate_glb
+from tools.validation.glb import extract_glb_images, validate_glb
 from .vram_monitor import VramMonitor
 from .reference_pipeline import assess_reference, preprocess_reference
 from .schemas import JobManifest, StageName, StageStatus
@@ -84,6 +84,8 @@ class PipelineRunner:
                 await self._references(manifest, logger)
             elif stage is StageName.GEOMETRY:
                 await self._geometry(manifest, logger, log_path)
+            elif stage is StageName.TEXTURES:
+                await self._textures(manifest, logger)
             else:
                 raise RuntimeError(f"Stage '{stage.value}' is not available until its required local provider is installed")
             record.status = StageStatus.READY
@@ -175,3 +177,25 @@ class PipelineRunner:
         manifest.actual_provider = result.payload["provider"]
         manifest.stages[StageName.GEOMETRY.value].result = {"mesh_path": str(mesh_path.relative_to(job_dir)), "settings": settings, "retry_history": retry_history, "vram": vram_metrics, "stdout": result.stdout[-4000:], "validation": report.__dict__}
         logger.info("Generated mesh saved: %s", mesh_path)
+
+    async def _textures(self, manifest: JobManifest, logger: logging.Logger) -> None:
+        geometry = manifest.stages[StageName.GEOMETRY.value]
+        mesh_value = geometry.result.get("mesh_path")
+        if not geometry.status is StageStatus.READY or not isinstance(mesh_value, str):
+            raise RuntimeError("Geometry must be READY before texture extraction")
+        job_dir = self.store.job_dir(manifest.job_id)
+        mesh_path = job_dir / mesh_value
+        report = validate_glb(mesh_path)
+        if not report.valid:
+            raise WorkerFailure("GEOMETRY_INVALID", "; ".join(report.errors))
+        texture_dir = job_dir / "textures" / "source"
+        images = await asyncio.to_thread(extract_glb_images, mesh_path, texture_dir)
+        materials = report.material_count
+        warnings: list[str] = []
+        if materials and not images:
+            warnings.append("GLB contains materials but no embedded image textures; only material factors are available")
+        if not materials and not images:
+            warnings.append("Provider output has no material or texture data")
+        manifest.stages[StageName.TEXTURES.value].result = {"source_mesh": mesh_value, "images": [{**item, "path": str(Path(item["path"]).relative_to(job_dir))} for item in images], "material_count": materials, "warnings": warnings}
+        manifest.warnings.extend(warnings)
+        logger.info("Extracted %s embedded texture images", len(images))

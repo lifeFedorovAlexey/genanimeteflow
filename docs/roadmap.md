@@ -10,13 +10,14 @@ Each checked item must have working code, automated coverage where practical, a 
 - [x] Single-GPU serialization boundary
 - [x] Reference upload, original preservation and real preprocessing
 - [x] Structured stage logs and SSE job events
+- [x] GLB mesh validation and embedded texture extraction
 - [x] Foundation tests and production web build
 
 ## Pipeline stages
 
 - [ ] Pin and install a real local single-image geometry worker; expose model download/integrity checks
 - [ ] Implement SPAR3D provider subprocess protocol and generated-mesh persistence
-- [ ] Implement real textured output and PBR asset validation
+- [ ] Implement real textured output and full PBR material validation (embedded extraction is implemented)
 - [ ] Implement Blender retopology/UV worker with roundtrip checks
 - [ ] Implement UniRig worker, canonical mapping and skin-weight validation
 - [ ] Implement licensed motion library installation, normalization and catalog validation

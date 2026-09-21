@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 import struct
+import base64
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -103,6 +104,44 @@ class GlbReader:
             start = base + index * stride
             values.append(tuple(struct.unpack_from("<" + component_format * components, self.binary, start)))
         return values
+
+    def buffer_view_bytes(self, view_index: int) -> bytes:
+        views = self.document.get("bufferViews", [])
+        if view_index < 0 or view_index >= len(views):
+            raise ValueError(f"BufferView index {view_index} is out of range")
+        view = views[view_index]
+        buffer_index = int(view.get("buffer", 0))
+        if buffer_index != 0:
+            raise ValueError(f"Only embedded buffer 0 is supported, got buffer {buffer_index}")
+        start = int(view.get("byteOffset", 0))
+        end = start + int(view.get("byteLength", 0))
+        if start < 0 or end > len(self.binary):
+            raise ValueError(f"BufferView {view_index} extends beyond the embedded BIN chunk")
+        return self.binary[start:end]
+
+
+def extract_glb_images(path: Path, destination: Path) -> list[dict[str, Any]]:
+    reader = GlbReader(path)
+    reader.read()
+    destination.mkdir(parents=True, exist_ok=True)
+    extracted: list[dict[str, Any]] = []
+    for index, image in enumerate(reader.document.get("images", [])):
+        mime_type = image.get("mimeType")
+        if image.get("bufferView") is not None:
+            content = reader.buffer_view_bytes(int(image["bufferView"]))
+        elif isinstance(image.get("uri"), str) and image["uri"].startswith("data:"):
+            header, encoded = image["uri"].split(",", 1)
+            mime_type = mime_type or header.split(";", 1)[0][5:]
+            content = base64.b64decode(encoded)
+        else:
+            raise ValueError(f"Image {index} is not embedded in the GLB")
+        if not content:
+            raise ValueError(f"Image {index} is empty")
+        extension = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp"}.get(mime_type, ".bin")
+        output = destination / f"image_{index:03d}{extension}"
+        output.write_bytes(content)
+        extracted.append({"index": index, "path": str(output), "mime_type": mime_type, "size_bytes": len(content), "name": image.get("name")})
+    return extracted
 
 
 def validate_glb(path: Path, require_skeleton: bool = False, require_animations: bool = False) -> GlbValidationReport:

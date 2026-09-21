@@ -28,6 +28,7 @@ Open http://127.0.0.1:5173. The API is localhost-only at http://127.0.0.1:8000.
 - foreground quality report with GOOD/WARNING/ERROR states
 - structured per-stage logs and an SSE event stream
 - single-GPU serialization boundary
+- GLB mesh integrity validation and extraction of only embedded provider textures
 - honest provider capability reporting: unavailable ML stages are not simulated
 
 The model workers, Blender and motion assets must be installed and version-pinned before their stages can be enabled. See [docs/models.md](docs/models.md) and run `scripts/check_workers.ps1`; no generated mesh or animation is bundled or represented as a fake result.
