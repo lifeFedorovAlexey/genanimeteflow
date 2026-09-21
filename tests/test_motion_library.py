@@ -34,4 +34,5 @@ class MotionLibraryTests(unittest.TestCase):
             self.assertEqual(record["clips"][0]["duration"], 1.0)
             self.assertEqual(len(record["source_sha256"]), 64)
             self.assertEqual(library.clips()["test-library:motions:0"]["library_id"], "test-library")
+            self.assertEqual(library.clips()["test-library:motions:0"]["category"], "idle")
             self.assertEqual(library.selected_clips(["test-library:motions:0"])[0]["name"], "Idle")

@@ -30,7 +30,9 @@ class MotionLibrary:
         result: dict[str, dict[str, Any]] = {}
         for library in self.catalog().get("libraries", []):
             for clip in library.get("clips", []):
-                enriched = {**clip, "library_id": library.get("id"), "license": library.get("license"), "allowed_for_commercial_use": library.get("allowed_for_commercial_use", False)}
+                name = str(clip.get("name", ""))
+                normalized_name = name.lower()
+                enriched = {**clip, "category": clip.get("category") or self._category_for_name(name), "loop": bool(clip.get("loop")) or "_loop" in normalized_name or normalized_name.endswith("loop"), "rootMotion": bool(clip.get("rootMotion")) or "_rm" in normalized_name or normalized_name.endswith("rm"), "library_id": library.get("id"), "license": library.get("license"), "allowed_for_commercial_use": library.get("allowed_for_commercial_use", False)}
                 result[str(clip["id"])] = enriched
         return result
 
@@ -99,8 +101,30 @@ class MotionLibrary:
             for index, animation in enumerate(reader.document.get("animations", [])):
                 name = str(animation.get("name") or f"clip_{index}")
                 duration, sample_count = self._animation_duration(reader, animation)
-                clips.append({"id": f"{library_id}:{path.stem}:{index}", "name": name, "source_file": str(path), "format": "glb", "duration": duration, "fps": round((sample_count - 1) / duration, 3) if duration and sample_count > 1 else None, "loop": False, "rootMotion": False, "requiredEquipmentType": None, "normalized": False})
+                normalized_name = name.lower()
+                clips.append({"id": f"{library_id}:{path.stem}:{index}", "name": name, "source_file": str(path), "format": "glb", "duration": duration, "fps": round((sample_count - 1) / duration, 3) if duration and sample_count > 1 else None, "loop": "_loop" in normalized_name or normalized_name.endswith("loop"), "rootMotion": "_rm" in normalized_name or normalized_name.endswith("rm"), "requiredEquipmentType": None, "normalized": False})
         return clips
+
+    @staticmethod
+    def _category_for_name(name: str) -> str:
+        normalized = name.lower().replace("-", "_").replace(" ", "_")
+        if any(token in normalized for token in ("idle", "tpose")):
+            return "idle"
+        if any(token in normalized for token in ("walk", "locomotion")):
+            return "walk"
+        if any(token in normalized for token in ("run", "sprint")):
+            return "run"
+        if any(token in normalized for token in ("jump", "climb")):
+            return "jump"
+        if any(token in normalized for token in ("melee", "sword", "shield", "attack", "throw", "hit")):
+            return "attack"
+        if any(token in normalized for token in ("crouch", "slide")):
+            return "crouch"
+        if any(token in normalized for token in ("dead", "death", "die")):
+            return "death"
+        if any(token in normalized for token in ("farm", "chop", "consume", "interact")):
+            return "interact"
+        return "other"
 
     @staticmethod
     def _animation_duration(reader: GlbReader, animation: dict[str, Any]) -> tuple[float | None, int]:
