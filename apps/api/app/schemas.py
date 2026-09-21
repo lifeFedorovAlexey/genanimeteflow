@@ -1,0 +1,79 @@
+from __future__ import annotations
+
+from datetime import datetime
+from enum import Enum
+from typing import Any
+
+from pydantic import BaseModel, Field
+
+
+class StageStatus(str, Enum):
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    READY = "READY"
+    FAILED = "FAILED"
+    FAILED_OOM = "FAILED_OOM"
+    INVALIDATED = "INVALIDATED"
+    CANCELLED = "CANCELLED"
+
+
+class StageName(str, Enum):
+    REFERENCES = "references"
+    GEOMETRY = "geometry"
+    TEXTURES = "textures"
+    RETOPOLOGY = "retopology"
+    RIG = "rig"
+    MOTIONS = "motions"
+    EXPORT = "export"
+
+
+class StageRecord(BaseModel):
+    name: StageName
+    status: StageStatus = StageStatus.PENDING
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    duration_seconds: float | None = None
+    error_category: str | None = None
+    error_message: str | None = None
+    log_path: str | None = None
+    result: dict[str, Any] = Field(default_factory=dict)
+
+
+class ReferenceSlot(BaseModel):
+    view: str
+    required: bool = False
+    original_path: str | None = None
+    processed_path: str | None = None
+    quality: dict[str, Any] | None = None
+
+
+class JobManifest(BaseModel):
+    job_id: str
+    created_at: datetime
+    updated_at: datetime
+    status: str = "CREATED"
+    profile: str = "BALANCED"
+    resolution: int = 512
+    requested_provider: str = "AUTO"
+    actual_provider: str | None = None
+    fallback_reason: str | None = None
+    references: dict[str, ReferenceSlot] = Field(default_factory=dict)
+    stages: dict[str, StageRecord] = Field(default_factory=dict)
+    pipeline_version: str = "0.1.0"
+    warnings: list[str] = Field(default_factory=list)
+
+
+class JobCreateRequest(BaseModel):
+    name: str = "Character Unit"
+    profile: str = "BALANCED"
+    resolution: int = Field(default=512, pattern=None)
+    requested_provider: str = "AUTO"
+
+
+class Settings(BaseModel):
+    profile: str = "BALANCED"
+    vram_budget_gb: float = 10.0
+    reserve_vram_gb: float = 1.5
+    preferred_resolution: int = 512
+    api_host: str = "127.0.0.1"
+    allow_external_api: bool = False

@@ -1,0 +1,3 @@
+import { Canvas } from "@react-three/fiber";
+import { Grid, OrbitControls } from "@react-three/drei";
+export default function Viewport() { return <div className="viewport"><Canvas camera={{ position: [3, 2.2, 4], fov: 42 }}><color attach="background" args={["#0c0e12"]} /><ambientLight intensity={1.2} /><directionalLight position={[3, 5, 2]} intensity={2} /><Grid args={[10, 10]} cellColor="#29303a" sectionColor="#4a5666" fadeDistance={12} /><OrbitControls makeDefault /></Canvas><div className="viewport-empty"><span>Unit Tester</span><small>Validated GLB assets will appear here</small></div></div>; }

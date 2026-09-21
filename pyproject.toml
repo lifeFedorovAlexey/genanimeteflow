@@ -1,0 +1,19 @@
+[project]
+name = "character-factory"
+version = "0.1.0"
+description = "Local production pipeline foundation for Character Factory"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115,<1",
+  "uvicorn[standard]>=0.30,<1",
+  "python-multipart>=0.0.9,<1",
+  "Pillow>=10,<12",
+  "psutil>=6,<7",
+  "numpy>=2,<3",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<9", "httpx>=0.27,<1"]
+
+[tool.pytest.ini_options]
+pythonpath = ["apps/api"]
