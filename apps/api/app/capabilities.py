@@ -26,7 +26,7 @@ def capabilities() -> dict:
             "retopology": {"available": bool(blender), "description": "Blender GLB import, triangle decimation and export" if blender else None, "reason": None if blender else "Blender is not installed"},
             "rig": {"available": unirig_ready, "reason": None if unirig_ready else "Configure UNIRIG_ROOT with the official UniRig inference scripts and checkpoint"},
             "motions": {"available": False, "reason": "Motion library has not been installed"},
-            "export": {"available": False, "reason": "Requires a validated rigged asset"},
+            "export": {"available": bool(blender), "description": "Blender GLB/FBX export with round-trip validation" if blender else None, "reason": None if blender else "Blender is not installed"},
         },
         "models": models,
     }

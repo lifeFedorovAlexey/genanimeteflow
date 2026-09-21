@@ -17,18 +17,18 @@ Each checked item must have working code, automated coverage where practical, a 
 
 ## Pipeline stages
 
+- [x] Implement SPAR3D provider subprocess protocol and generated-mesh persistence (runtime requires official checkout and weights)
 - [ ] Pin and install a real local single-image geometry worker; expose model download/integrity checks
-- [ ] Implement SPAR3D provider subprocess protocol and generated-mesh persistence
 - [ ] Implement real textured output and full PBR material validation (embedded extraction is implemented)
-- [ ] Implement Blender retopology/UV worker with roundtrip checks
-- [ ] Implement UniRig worker, canonical mapping and skin-weight validation
+- [x] Implement Blender retopology worker with GLB validation (UV-preserving quad mode remains gated)
+- [x] Implement UniRig worker, canonical mapping and skin-weight validation (runtime requires official checkout and checkpoint)
 - [ ] Implement licensed motion library installation, normalization and catalog validation
 - [ ] Normalize registered clips onto CanonicalHumanoidRig and validate retarget output
 - [ ] Connect graph evaluation to retargeted Blender actions and playable Unit Tester controls
 - [ ] Implement retargeting and the canonical animation graph
 - [ ] Implement equipment, clothing, sockets and IK validation
-- [ ] Load validated GLB assets in Unit Tester and add controls/debug views
-- [ ] Implement GLB/FBX export and manifest roundtrip validation
+- [x] Load validated GLB assets in Unit Tester (viewer controls are still minimal)
+- [x] Implement GLB/FBX export worker and manifest roundtrip validation (runtime requires Blender and selected normalized actions)
 - [ ] Harden recovery, cancellation, cache cleanup, security and full acceptance test
 
 ## Commit convention

@@ -15,9 +15,11 @@ from .model_registry import ModelRegistry
 from .pipeline_graph import STAGE_DEPENDENCIES
 from .process_manager import ProcessManager, WorkerFailure
 from tools.validation.glb import extract_glb_images, validate_glb
+from .export_manifest import save_unit_manifest
 from .vram_monitor import VramMonitor
 from .reference_pipeline import assess_reference, preprocess_reference
 from .schemas import JobManifest, StageName, StageStatus
+from tools.validation.rig import validate_rigged_glb
 
 
 class SingleGpuQueue:
@@ -124,6 +126,8 @@ class PipelineRunner:
             await self._retopology(manifest, logger, log_path)
         elif stage is StageName.RIG:
             await self._rig(manifest, logger, log_path)
+        elif stage is StageName.EXPORT:
+            await self._export(manifest, logger, log_path)
         else:
             raise RuntimeError(f"Stage '{stage.value}' is not available until its required local provider is installed")
 
@@ -247,9 +251,34 @@ class PipelineRunner:
         logger.info("Starting official UniRig worker")
         result = await asyncio.to_thread(self.process_manager.run_json_worker, [sys.executable, "-m", "workers.unirig.worker"], request, REPO_ROOT, env, log_path)
         rigged_mesh = Path(result.payload["rigged_mesh"])
-        from tools.validation.rig import validate_rigged_glb
         report = validate_rigged_glb(rigged_mesh, require_canonical=False)
         if not report.valid:
             raise WorkerFailure("RIG_VALIDATION_FAILED", "; ".join(report.errors))
         manifest.stages[StageName.RIG.value].result = {"provider": result.payload["provider"], "source_mesh": mesh_value, "mesh_path": str(rigged_mesh.relative_to(job_dir)), "skeleton": str(Path(result.payload["skeleton"]).relative_to(job_dir)), "skin": str(Path(result.payload["skin"]).relative_to(job_dir)), "validation": report.__dict__}
         logger.info("Rigged GLB saved: %s", rigged_mesh)
+
+    async def _export(self, manifest: JobManifest, logger: logging.Logger, log_path: Path) -> None:
+        if not manifest.export_actions:
+            raise RuntimeError("Select at least one normalized action before export")
+        rig = manifest.stages[StageName.RIG.value]
+        mesh_value = rig.result.get("mesh_path")
+        if rig.status is not StageStatus.READY or not isinstance(mesh_value, str):
+            raise RuntimeError("Rig must be READY before export")
+        blender = shutil.which("blender")
+        if not blender:
+            raise WorkerFailure("BLENDER_MISSING", "Blender executable was not found")
+        job_dir = self.store.job_dir(manifest.job_id)
+        source_mesh = job_dir / mesh_value
+        glb_path = job_dir / "export" / "unit.glb"
+        fbx_path = job_dir / "export" / "unit.fbx"
+        request = {"source_mesh": str(source_mesh), "glb_output": str(glb_path), "fbx_output": str(fbx_path), "selected_actions": manifest.export_actions}
+        logger.info("Starting Blender export worker: %s", request)
+        result = await asyncio.to_thread(self.process_manager.run_json_worker, [sys.executable, "-m", "workers.blender.export_worker"], request, REPO_ROOT, {"BLENDER_PATH": blender}, log_path)
+        roundtrip = result.payload.get("roundtrip", {})
+        glb_report = validate_glb(glb_path, require_skeleton=True, require_animations=True)
+        rig_report = validate_rigged_glb(glb_path, require_canonical=False)
+        if not glb_report.valid or not rig_report.valid:
+            raise WorkerFailure("EXPORT_ROUNDTRIP_FAILED", "; ".join(glb_report.errors + rig_report.errors))
+        manifest_path = save_unit_manifest(manifest, job_dir, glb_path, fbx_path, {**roundtrip, "glb": glb_report.__dict__, "rig": rig_report.__dict__})
+        manifest.stages[StageName.EXPORT.value].result = {"glb_path": str(glb_path.relative_to(job_dir)), "fbx_path": str(fbx_path.relative_to(job_dir)), "manifest_path": str(manifest_path.relative_to(job_dir)), "selected_actions": manifest.export_actions, "roundtrip": {**roundtrip, "glb": glb_report.__dict__, "rig": rig_report.__dict__}}
+        logger.info("Export completed: %s", glb_path)

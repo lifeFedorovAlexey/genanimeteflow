@@ -60,6 +60,7 @@ class JobManifest(BaseModel):
     references: dict[str, ReferenceSlot] = Field(default_factory=dict)
     stages: dict[str, StageRecord] = Field(default_factory=dict)
     pipeline_version: str = "0.1.0"
+    export_actions: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
 
 
@@ -85,3 +86,7 @@ class MotionRegisterRequest(BaseModel):
     source_id: str
     license: str
     allowed_for_commercial_use: bool = False
+
+
+class ExportSelectionRequest(BaseModel):
+    actions: list[str] = Field(default_factory=list)
