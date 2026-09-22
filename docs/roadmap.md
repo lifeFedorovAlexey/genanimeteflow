@@ -33,7 +33,7 @@ Each checked item must have working code, automated coverage where practical, a 
 - [x] Connect installed motion clips to job selection, catalog validation and the motions stage
 - [x] Connect graph evaluation endpoint to normalized Blender actions and Unit Tester state changes (full blend-tree/IK layers remain separate)
 - [ ] Implement retargeting and the canonical animation graph (canonical retarget worker is real and smoke-tested; full graph blending, locomotion transitions and acceptance clips remain)
-- [ ] Implement equipment, clothing, sockets and IK validation
+- [x] Implement equipment, clothing, sockets and IK validation (real acceptance run: Utility Vest + CC0 Lightning Rifle, one socket, four IK targets/constraints)
 - [x] Add validated local equipment manifest/catalog registration with license-independent provenance and socket/grip metadata
 - [x] Add Blender rigid-equipment socket attachment stage with output and skeleton validation (skinned clothing and IK remain separate stages)
 - [x] Load validated GLB assets in Unit Tester with embedded clip playback, WASD movement states and wireframe/skeleton debug toggles
