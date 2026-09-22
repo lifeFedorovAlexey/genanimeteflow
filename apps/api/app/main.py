@@ -241,9 +241,9 @@ def get_job(job_id: str) -> JobManifest:
 
 
 @app.get("/api/jobs/{job_id}/acceptance")
-def get_acceptance(job_id: str) -> dict:
+def get_acceptance(job_id: str, full: bool = False) -> dict:
     manifest = get_job(job_id)
-    return validate_job(manifest, store.job_dir(job_id))
+    return validate_job(manifest, store.job_dir(job_id), require_full_acceptance=full)
 
 
 @app.post("/api/jobs/{job_id}/references/{view}", response_model=JobManifest)
