@@ -82,7 +82,7 @@ class HunyuanWorkerTests(unittest.TestCase):
                 result = run_texture({"mesh_path": str(root / "missing.glb"), "image": str(root / "missing.png"), "output_mesh": str(root / "out.glb")})
         self.assertEqual(result["category"], "INPUT_MISSING")
 
-    def test_paint_input_composites_transparency_on_white(self) -> None:
+    def test_paint_input_preserves_alpha_for_official_recentering(self) -> None:
         from PIL import Image
 
         source = Image.new("RGBA", (2, 1), (0, 0, 0, 0))
@@ -90,9 +90,24 @@ class HunyuanWorkerTests(unittest.TestCase):
 
         prepared = _prepare_paint_image(source)
 
-        self.assertEqual(prepared.mode, "RGB")
-        self.assertEqual(prepared.getpixel((0, 0)), (255, 0, 0))
-        self.assertEqual(prepared.getpixel((1, 0)), (255, 255, 255))
+        self.assertEqual(prepared.mode, "RGBA")
+        self.assertEqual(prepared.getpixel((0, 0)), (255, 0, 0, 255))
+        self.assertEqual(prepared.getpixel((1, 0)), (0, 0, 0, 0))
+
+    def test_texture_failure_does_not_silently_switch_provider(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "hy3dgen" / "texgen").mkdir(parents=True)
+            mesh, image = root / "input.glb", root / "front.png"
+            mesh.write_bytes(b"mesh")
+            image.write_bytes(b"image")
+            failure = {"ok": False, "category": "PROVIDER_ERROR", "error": "test failure"}
+            with patch.dict(os.environ, {"HUNYUAN_ROOT": str(root), "HUNYUAN_CACHE_ROOT": str(root / "cache")}), \
+                 patch("workers.hunyuan.texture_worker._run_official_paint", return_value=failure), \
+                 patch("workers.hunyuan.texture_worker.subprocess.run") as run_process:
+                result = run_texture({"mesh_path": str(mesh), "image": str(image), "output_mesh": str(root / "out.glb")})
+            self.assertEqual(result, failure)
+            run_process.assert_not_called()
 
     def test_paint_resolution_reaches_renderer_and_baker(self) -> None:
         class FakeConfig:

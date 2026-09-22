@@ -5,7 +5,10 @@ import json
 import os
 import sys
 import time
+import subprocess
+import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 
 def _allow_official_local_pipeline_code() -> None:
@@ -22,16 +25,36 @@ def _allow_official_local_pipeline_code() -> None:
 
 
 def _prepare_paint_image(image):
-    """Keep the cutout in the format expected by Tencent's official pipeline.
-
-    Hunyuan Paint's own ``recenter_image`` crops RGBA references and restores
-    a controlled border before its delight and multiview stages. Converting
-    these images to opaque RGB here bypassed that alignment step and made the
-    diffusion model treat the unused canvas as character pixels.
-    """
-    from PIL import Image
-
+    """Keep alpha so Tencent's recenter_image can align the reference."""
     return image.convert("RGBA")
+
+
+def _prepare_mesh_uv(mesh_path: str, output_dir: Path):
+    import numpy as np
+    import trimesh
+
+    blender = os.environ.get("BLENDER_PATH", "")
+    if not blender or not Path(blender).is_file():
+        raise RuntimeError("Blender is required to prepare the Paint UV atlas")
+    script = Path(__file__).resolve().parents[2] / "scripts" / "prepare_paint_uv.py"
+    with tempfile.TemporaryDirectory(prefix="paint-uv-", dir=output_dir) as directory:
+        target = Path(directory) / "mesh.npz"
+        completed = subprocess.run(
+            [blender, "--background", "--python-exit-code", "1", "--python", str(script), "--",
+             "--input", str(mesh_path), "--output", str(target),
+             "--merge-small-charts", "--remove-floaters"],
+            capture_output=True, text=True, check=False,
+        )
+        if completed.returncode or not target.is_file():
+            raise RuntimeError(f"Paint UV preparation failed: {completed.stdout}\n{completed.stderr}")
+        with np.load(target) as data:
+            mesh = trimesh.Trimesh(vertices=data["vertices"], faces=data["faces"], process=False,
+                visual=trimesh.visual.TextureVisuals(uv=data["uv"]))
+    # Smooth shading must be continuous across UV seams without welding UVs.
+    points, inverse = np.unique(mesh.vertices, axis=0, return_inverse=True)
+    normals = trimesh.geometry.mean_vertex_normals(len(points), inverse[mesh.faces], mesh.face_normals)
+    mesh.vertex_normals = normals[inverse]
+    return mesh
 
 
 def _configure_texture_resolution(pipeline, resolution: int):
@@ -57,37 +80,39 @@ def run(request: dict) -> dict:
     from PIL import Image
     _allow_official_local_pipeline_code()
     from hy3dgen.texgen import Hunyuan3DPaintPipeline
+    from hy3dgen.texgen import pipelines as paint_module
+    from workers.hunyuan.surface_inpaint import surface_inpaint
 
     if not torch.cuda.is_available():
         return {"ok": False, "category": "CUDA_UNAVAILABLE", "error": "Hunyuan Paint Python cannot access CUDA"}
-    loaded = trimesh.load(request["mesh_path"], force="mesh")
-    if isinstance(loaded, trimesh.Scene):
-        meshes = [item for item in loaded.geometry.values() if isinstance(item, trimesh.Trimesh)]
-        if not meshes:
-            return {"ok": False, "category": "INPUT_INVALID", "error": "Input GLB contains no triangle mesh"}
-        loaded = trimesh.util.concatenate(meshes)
+    started = time.perf_counter()
+    output_path = Path(request["output_mesh"])
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    loaded = _prepare_mesh_uv(request["mesh_path"], output_path.parent)
     pipeline = Hunyuan3DPaintPipeline.from_pretrained(request["model_path"] or request["model_id"])
-    _configure_texture_resolution(pipeline, int(request.get("texture_resolution", 1024)))
+    _configure_texture_resolution(pipeline, int(request.get("texture_resolution", 2048)))
     # Tencent's Paint wrapper is a custom pipeline, not a diffusers Pipeline;
     # its similarly named offload helper expects a ``components`` mapping that
     # does not exist. Device placement is handled by the official pipeline.
-    started = time.perf_counter()
     image_paths = request.get("images") or [request["image"]]
     paint_images = []
     for image_path in image_paths:
         with Image.open(image_path) as source_image:
             paint_images.append(_prepare_paint_image(source_image))
-    # Tencent's official Paint pipeline accepts a list of reference views. It
-    # renders its own normal/position cameras, synthesizes missing views, then
-    # bakes them with weighted seam-aware blending. Passing only FRONT here was
-    # the reason four-view jobs still produced stretched, dirty atlases.
-    textured = pipeline(loaded, image=paint_images)
-    output_path = Path(request["output_mesh"])
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+    # Keep Tencent's delight, multiview synthesis and visibility-weighted bake.
+    # Preserve the prepared atlas and fill unobserved texels on the surface;
+    # unrelated atlas islands must not donate colors to one another.
+    pipeline.texture_inpaint = lambda texture, mask: surface_inpaint(pipeline.render, texture, mask)
+    with patch.object(paint_module, "mesh_uv_wrap", lambda mesh: mesh):
+        textured = pipeline(loaded, image=paint_images)
+    textured.visual.material = trimesh.visual.material.PBRMaterial(
+        baseColorTexture=textured.visual.material.image, metallicFactor=0.0, roughnessFactor=.8)
     textured.export(output_path)
     if hasattr(torch.cuda, "empty_cache"):
         torch.cuda.empty_cache()
-    return {"ok": True, "mesh_path": str(output_path), "duration_seconds": time.perf_counter() - started, "input_view_count": len(paint_images), "multiview_bake": len(paint_images) > 1, "settings": request}
+    return {"ok": True, "mesh_path": str(output_path), "duration_seconds": time.perf_counter() - started, "input_view_count": len(paint_images), "multiview_bake": len(paint_images) > 1,
+            "uv_method": "blender_angle_based_merged_charts", "inpaint_method": "surface_nearest_then_uv_padding",
+            "bake_resolution": pipeline.config.texture_size, "settings": request}
 
 
 if __name__ == "__main__":

@@ -32,3 +32,4 @@ apps/web/vite.config.d.ts
 jobs/*/clothing/
 jobs/*/acceptance/
 jobs/*/.cache/
+jobs/*/material-diagnosis/

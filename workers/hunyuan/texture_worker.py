@@ -25,7 +25,7 @@ def _run_official_paint(
         "output_mesh": str(output),
         "model_id": str(request.get("model_id", "tencent/Hunyuan3D-2")),
         "model_path": os.getenv("HUNYUAN_PAINT_MODEL_PATH", ""),
-        "texture_resolution": int(request.get("texture_resolution", 1024)),
+        "texture_resolution": int(request.get("texture_resolution", 2048)),
         "low_vram_mode": bool(request.get("low_vram_mode", True)),
     }
     completed = subprocess.run(
@@ -51,32 +51,11 @@ def _run_official_paint(
     if not output_path.is_file() or output_path.stat().st_size == 0:
         return {"ok": False, "category": "PROVIDER_OUTPUT_INVALID", "error": f"Hunyuan Paint did not produce a non-empty GLB: {output_path}"}
 
-    # The official bake is the quality source. A small atlas cleanup removes
-    # isolated diffusion specks before the GLB reaches the viewer; it does not
-    # alter geometry, UVs, or the character's material regions.
-    cleanup_script = Path(__file__).resolve().parents[2] / "scripts" / "clean_glb_texture.py"
-    blender = environment.get("BLENDER_PATH")
-    cleaned = output_path.with_name(f"{output_path.stem}.clean.glb")
-    cleanup = None
-    if blender and Path(blender).is_file() and cleanup_script.is_file():
-        cleanup = subprocess.run(
-            [blender, "--background", "--python", str(cleanup_script), "--", "--input", str(output_path), "--output", str(cleaned)],
-            cwd=Path(__file__).resolve().parents[2],
-            env=environment,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if cleanup.returncode == 0 and cleaned.is_file() and cleaned.stat().st_size > 0:
-            cleaned.replace(output_path)
-        else:
-            cleaned.unlink(missing_ok=True)
-
     result.update(
         provider="HunyuanPaintProvider",
         input_view_count=len(images),
         multiview_bake=len(images) > 1,
-        texture_cleanup="atlas_denoise" if cleanup and cleanup.returncode == 0 else "skipped",
+        texture_cleanup="none",
         stdout=completed.stdout,
         stderr=completed.stderr,
     )
@@ -119,33 +98,9 @@ def run(request: dict) -> dict:
             "TRANSFORMERS_CACHE": str(cache_root / "transformers"),
         }
     )
-    official_failure = _run_official_paint(request, root, environment, python_executable, mesh, images, output)
-    if official_failure.get("ok"):
-        return official_failure
-
-    projection_output = output.with_name("multiview_projection.glb")
-    projection_payload = {
-        "mesh_path": str(mesh),
-        "images": [str(image) for image in images],
-        "views": ["front", "left", "back", "right"][: len(images)],
-        "output_mesh": str(projection_output),
-    }
-    projected = subprocess.run(
-        [python_executable, "-m", "workers.hunyuan.multiview_projection"],
-        cwd=Path(__file__).resolve().parents[2],
-        env=environment,
-        input=json.dumps(projection_payload),
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if projected.returncode == 0:
-        projected_result = _last_json_object(projected.stdout)
-        if projected_result.get("ok") and projection_output.is_file() and projection_output.stat().st_size > 0:
-            projected_result.update(provider="MultiViewProjectionProvider", input_view_count=len(images), multiview_bake=len(images) > 1)
-            return projected_result
-
-    return official_failure
+    # A failed Paint run must remain failed, not silently switch to a different
+    # unvalidated projection algorithm and report success.
+    return _run_official_paint(request, root, environment, python_executable, mesh, images, output)
 
 
 def _last_json_object(output: str) -> dict:

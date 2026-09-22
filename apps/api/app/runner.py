@@ -388,7 +388,7 @@ class PipelineRunner:
             if not texture_images:
                 raise RuntimeError("At least one processed reference is required for Hunyuan Paint")
             textured_mesh = job_dir / "textures" / "hunyuan-paint" / "textured.glb"
-            texture_request = {"mesh_path": str(mesh_path), "images": texture_images, "output_mesh": str(textured_mesh), "model_id": hunyuan["model_id"], "texture_resolution": manifest.texture_resolution if manifest.profile == "CUSTOM" else 1024, "low_vram_mode": manifest.low_vram_mode if manifest.profile == "CUSTOM" else manifest.profile.upper() != "MAX"}
+            texture_request = {"mesh_path": str(mesh_path), "images": texture_images, "output_mesh": str(textured_mesh), "model_id": hunyuan["model_id"], "texture_resolution": manifest.texture_resolution if manifest.profile == "CUSTOM" else 2048, "low_vram_mode": manifest.low_vram_mode if manifest.profile == "CUSTOM" else manifest.profile.upper() != "MAX"}
             logger.info("Starting official Hunyuan Paint multiview worker with %s references", len(texture_images))
             result = await asyncio.to_thread(
                 self.process_manager.run_json_worker,
@@ -409,10 +409,11 @@ class PipelineRunner:
             if not paint_report.valid:
                 raise WorkerFailure("TEXTURE_OUTPUT_INVALID", "; ".join(paint_report.errors))
             provider = result.payload.get("provider")
-            if provider != "MultiViewProjectionProvider" and (paint_report.uv_primitive_count == 0 or paint_report.texture_count == 0):
+            if paint_report.uv_primitive_count == 0 or paint_report.texture_count == 0:
                 raise WorkerFailure("TEXTURE_OUTPUT_INVALID", "Hunyuan Paint returned no usable UV texture atlas")
-            images = await asyncio.to_thread(extract_glb_images, painted, job_dir / "textures" / "source") if provider != "MultiViewProjectionProvider" else []
+            images = await asyncio.to_thread(extract_glb_images, painted, job_dir / "textures" / "source")
             manifest.stages[StageName.TEXTURES.value].result = {"source_mesh": str(painted.relative_to(job_dir)), "geometry_mesh": mesh_value, "provider": provider, "input_views": [Path(path).name for path in texture_images], "input_view_count": len(texture_images), "multiview_bake": len(texture_images) > 1, "texture_cleanup": result.payload.get("texture_cleanup"), "images": [{**item, "path": str(Path(item["path"]).relative_to(job_dir))} for item in images], "material_count": paint_report.material_count, "vertex_color_count": result.payload.get("vertex_color_count", 0), "validation": paint_report.__dict__}
+            manifest.stages[StageName.TEXTURES.value].result.update({key: result.payload.get(key) for key in ("uv_method", "inpaint_method", "bake_resolution")})
             logger.info("Hunyuan textured mesh saved: %s", painted)
             return
         report = validate_glb(mesh_path)
