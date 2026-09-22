@@ -13,7 +13,7 @@ const stageMeta: Record<string, { label: string; action: string; icon: string }>
   textures: { label: "Materials", action: "Extract materials", icon: "03" },
   retopology: { label: "Game topology", action: "Optimize mesh", icon: "04" },
   rig: { label: "Skeleton", action: "Build skeleton", icon: "05" },
-  equipment: { label: "Equipment", action: "Attach equipment", icon: "06" },
+  equipment: { label: "Optional equipment", action: "Attach equipment", icon: "06" },
   motions: { label: "Animations", action: "Normalize motions", icon: "07" },
   export: { label: "Export unit", action: "Export unit", icon: "08" },
 };
@@ -53,7 +53,7 @@ function blockedReason(job: Job, stage: string, capabilities?: Capabilities): st
   if (stage === "textures" && job.stages.geometry?.status !== "READY") return "Generate the 3D shape first";
   if (stage === "retopology" && job.stages.textures?.status !== "READY") return "Extract materials first";
   if (stage === "rig" && job.stages.retopology?.status !== "READY") return "Optimize the mesh first";
-  if (stage === "equipment" && job.equipment_assets.length === 0) return "Choose equipment in the asset library first";
+  if (stage === "equipment" && job.equipment_assets.length === 0) return "Optional: register equipment if this character needs it";
   if (stage === "equipment" && job.stages.rig?.status !== "READY") return "Build the skeleton first";
   if (stage === "motions" && job.motion_clips.length === 0) return "Choose motion clips in the motion library first";
   if (stage === "motions" && job.stages.rig?.status !== "READY") return "Build the skeleton first";
@@ -68,7 +68,7 @@ function nextStep(job: Job, capabilities?: Capabilities): { title: string; body:
   if (failed) return { title: `${stageMeta[failed.stage].label} needs attention`, body: failed.record.error_message ?? "Open the stage details and run it again.", stage: failed.stage, action: "Try again", tone: "blocked" };
   const running = stageOrder.find(stage => job.stages[stage]?.status === "RUNNING");
   if (running) return { title: `${stageMeta[running].label} is working`, body: "The result will appear here automatically when the worker finishes.", tone: "action" };
-  const pending = stageOrder.find(stage => job.stages[stage]?.status !== "READY");
+  const pending = stageOrder.find(stage => stage !== "equipment" || job.equipment_assets.length > 0 || job.stages.equipment?.status !== "PENDING");
   if (pending) {
     const canRun = canRunStage(job, pending, capabilities);
     return { title: canRun ? stageMeta[pending].action : `Prepare ${stageMeta[pending].label.toLowerCase()}`, body: blockedReason(job, pending, capabilities), stage: canRun ? pending : undefined, action: canRun ? stageMeta[pending].action : undefined, tone: canRun ? "action" : "blocked" };
