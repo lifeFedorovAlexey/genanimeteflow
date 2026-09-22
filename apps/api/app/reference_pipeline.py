@@ -36,8 +36,8 @@ def _half_has_foreground(alpha: Image.Image, left: int, right: int, top: int, bo
 
 
 def preprocess_reference(source: Path, destination: Path, resolution: int) -> dict[str, Any]:
-    if resolution not in {384, 512, 640, 768}:
-        raise ValueError("resolution must be one of 384, 512, 640, 768")
+    if not 384 <= resolution <= 1536:
+        raise ValueError("resolution must be between 384 and 1536 pixels")
     with Image.open(source) as loaded:
         image = loaded.convert("RGBA")
         mask = _foreground_mask(image)

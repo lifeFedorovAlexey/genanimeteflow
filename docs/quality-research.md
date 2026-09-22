@@ -2,6 +2,15 @@
 
 ## Decision and evidence boundary
 
+## Product requirement amendment — 2026-09-22
+
+The pipeline is not tied to a 512 px reference target. Reference resolution is
+an input/storage control (384–1536 px), while actual quality is bounded by the
+installed model, the available VRAM and the selected quality profile. A model
+may resize an input internally; the UI must say so and must not present input
+resolution as a guaranteed quality multiplier. 512 px remains a valid fast
+setting, not the product acceptance target.
+
 Target: a completely local, animation-ready character whose visible quality and
 deformations are not inferior to the user's Tripo + Mixamo comparison. Passing
 mesh validation alone does not establish that quality. No percentage-equivalence
@@ -203,6 +212,19 @@ the final GLB contains `102,252` vertices, `7` embedded textures, `35` bones
 and `10` animations. The strict full gate is now `28/30`: only the missing
 user-supplied RIGHT reference and the corresponding four-view multiview gate
 remain. No copied or mirrored view is counted as acceptance evidence.
+
+## Controlled Paint resolution check — 2026-09-22
+
+The Paint worker previously exposed `texture_resolution` in the manifest but
+did not apply it to Tencent's renderer, which always stayed at its built-in
+2048 setting. The worker now updates the official render, bake and texture
+resolution together. On an official Hunyuan multiview sample, the same real
+mesh completed with a 1024×1024 embedded texture in 291.3 seconds on the
+RTX 4070 in low-VRAM mode. The GLB reloaded successfully and the albedo render
+no longer showed the earlier white block/transparent-cutout failure. Fine
+grain remains on dark clothing, so this proves a stable 1024 technical mode,
+not parity with Tripo's texture quality. 2048 is exposed as a real option but
+has not been accepted as a stable setting on this machine.
 
 Pixal3D's seven single-view checkpoint files total about 24.05 GB decimal,
 excluding auxiliary models, dependencies and build space. Whole-repository weight

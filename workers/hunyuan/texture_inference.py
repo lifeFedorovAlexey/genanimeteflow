@@ -37,6 +37,20 @@ def _prepare_paint_image(image):
     return Image.alpha_composite(background, rgba).convert("RGB")
 
 
+def _configure_texture_resolution(pipeline, resolution: int):
+    """Apply the requested texture size to Tencent's renderer and bake path."""
+    if resolution not in {512, 1024, 2048}:
+        raise ValueError("Hunyuan Paint texture resolution must be 512, 1024, or 2048")
+    pipeline.config.render_size = resolution
+    pipeline.config.texture_size = resolution
+    pipeline.render.set_default_render_resolution(resolution)
+    pipeline.render.set_default_texture_resolution(resolution)
+    # MeshRender computes this once in __init__; keep its resolution-dependent
+    # unreliable-kernel threshold consistent after changing the configuration.
+    pipeline.render.bake_unreliable_kernel_size = max(1, int((2 / 512) * resolution))
+    return pipeline
+
+
 def run(request: dict) -> dict:
     official_root = Path(os.environ.get("HUNYUAN_ROOT", ".")).expanduser().resolve()
     if str(official_root) not in sys.path:
@@ -56,6 +70,7 @@ def run(request: dict) -> dict:
             return {"ok": False, "category": "INPUT_INVALID", "error": "Input GLB contains no triangle mesh"}
         loaded = trimesh.util.concatenate(meshes)
     pipeline = Hunyuan3DPaintPipeline.from_pretrained(request["model_path"] or request["model_id"])
+    _configure_texture_resolution(pipeline, int(request.get("texture_resolution", 1024)))
     # Tencent's Paint wrapper is a custom pipeline, not a diffusers Pipeline;
     # its similarly named offload helper expects a ``components`` mapping that
     # does not exist. Device placement is handled by the official pipeline.

@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 from workers.hunyuan.worker import run
 from workers.hunyuan.texture_worker import run as run_texture
-from workers.hunyuan.texture_inference import _prepare_paint_image
+from workers.hunyuan.texture_inference import _configure_texture_resolution, _prepare_paint_image
 from app.runner import choose_geometry_provider
 
 
@@ -98,6 +98,30 @@ class HunyuanWorkerTests(unittest.TestCase):
         self.assertEqual(prepared.mode, "RGB")
         self.assertEqual(prepared.getpixel((0, 0)), (255, 0, 0))
         self.assertEqual(prepared.getpixel((1, 0)), (255, 255, 255))
+
+    def test_paint_resolution_reaches_renderer_and_baker(self) -> None:
+        class FakeConfig:
+            render_size = 2048
+            texture_size = 2048
+
+        class FakeRender:
+            bake_unreliable_kernel_size = 8
+
+            def set_default_render_resolution(self, value):
+                self.render_resolution = value
+
+            def set_default_texture_resolution(self, value):
+                self.texture_resolution = value
+
+        class FakePipeline:
+            config = FakeConfig()
+            render = FakeRender()
+
+        pipeline = _configure_texture_resolution(FakePipeline(), 1024)
+        self.assertEqual(pipeline.config.render_size, 1024)
+        self.assertEqual(pipeline.config.texture_size, 1024)
+        self.assertEqual(pipeline.render.render_resolution, 1024)
+        self.assertEqual(pipeline.render.texture_resolution, 1024)
 
 
 if __name__ == "__main__":

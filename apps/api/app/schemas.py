@@ -60,7 +60,7 @@ class JobManifest(BaseModel):
     updated_at: datetime
     status: str = "CREATED"
     profile: QualityProfile = "BALANCED"
-    resolution: int = 512
+    resolution: int = Field(default=768, ge=384, le=1536)
     requested_provider: ProviderName = "AUTO"
     actual_provider: str | None = None
     fallback_reason: str | None = None
@@ -77,33 +77,33 @@ class JobManifest(BaseModel):
     octree_resolution: int = Field(default=384, ge=256, le=512)
     geometry_num_chunks: int = Field(default=20000, ge=5000, le=50000)
     low_vram_mode: bool = True
-    texture_resolution: Literal[512, 1024] = 1024
+    texture_resolution: Literal[512, 1024, 2048] = 1024
     warnings: list[str] = Field(default_factory=list)
 
 
 class JobCreateRequest(BaseModel):
     name: str = "Character Unit"
     profile: QualityProfile = "BALANCED"
-    resolution: Literal[384, 512, 640, 768] = 512
+    resolution: int = Field(default=768, ge=384, le=1536)
     requested_provider: ProviderName = "AUTO"
 
 
 class JobSettingsRequest(BaseModel):
     profile: QualityProfile = "BALANCED"
-    resolution: Literal[384, 512, 640, 768] = 512
+    resolution: int = Field(default=768, ge=384, le=1536)
     requested_provider: ProviderName = "AUTO"
     inference_steps: int = Field(default=50, ge=20, le=100)
     octree_resolution: int = Field(default=384, ge=256, le=512)
     geometry_num_chunks: int = Field(default=20000, ge=5000, le=50000)
     low_vram_mode: bool = True
-    texture_resolution: Literal[512, 1024] = 1024
+    texture_resolution: Literal[512, 1024, 2048] = 1024
 
 
 class Settings(BaseModel):
     profile: str = "BALANCED"
     vram_budget_gb: float = 10.0
     reserve_vram_gb: float = 1.5
-    preferred_resolution: int = 512
+    preferred_resolution: int = Field(default=768, ge=384, le=1536)
     api_host: str = "127.0.0.1"
     allow_external_api: bool = False
 

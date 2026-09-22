@@ -23,7 +23,10 @@ from pydantic import ValidationError
 class FoundationTests(unittest.TestCase):
     def test_job_resolution_is_rejected_before_a_worker_starts(self) -> None:
         with self.assertRaises(ValidationError):
-            JobCreateRequest(resolution=1024)
+            JobCreateRequest(resolution=2048)
+
+    def test_job_accepts_resolution_above_the_old_512_default(self) -> None:
+        self.assertEqual(JobCreateRequest(resolution=1024).resolution, 1024)
 
     def test_single_gpu_queue_serializes_operations(self) -> None:
         async def scenario() -> int:

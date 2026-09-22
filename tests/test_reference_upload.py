@@ -123,9 +123,9 @@ class ReferenceUploadTests(unittest.TestCase):
             self.assertEqual(updated.stages["rig"].status, StageStatus.INVALIDATED)
 
             with patch.object(main, "store", store):
-                updated = main.set_job_settings(job.job_id, JobSettingsRequest(profile="MAX", resolution=768))
+                updated = main.set_job_settings(job.job_id, JobSettingsRequest(profile="MAX", resolution=1024))
             self.assertEqual(updated.profile, "MAX")
-            self.assertEqual(updated.resolution, 768)
+            self.assertEqual(updated.resolution, 1024)
             self.assertEqual(updated.stages["references"].status, StageStatus.INVALIDATED)
             self.assertEqual(updated.stages["geometry"].status, StageStatus.INVALIDATED)
 
