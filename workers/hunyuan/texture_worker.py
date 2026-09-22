@@ -27,6 +27,20 @@ def run(request: dict) -> dict:
     python_executable = os.getenv("HUNYUAN_PYTHON") or sys.executable
     environment = os.environ.copy()
     environment["PYTHONPATH"] = os.pathsep.join(filter(None, [str(Path(__file__).resolve().parents[2]), str(root), environment.get("PYTHONPATH", "")]))
+    # Diffusers may materialize trusted local pipeline modules even when all
+    # model weights are already present. Keep that write inside the local
+    # Hunyuan checkout instead of an ACL-restricted user cache on Windows.
+    job_cache = output.parent.parent.parent / ".cache" / "huggingface"
+    cache_root = Path(os.getenv("HUNYUAN_CACHE_ROOT", str(job_cache))).expanduser().resolve()
+    cache_root.mkdir(parents=True, exist_ok=True)
+    environment.update(
+        {
+            "HF_HOME": str(cache_root),
+            "HF_MODULES_CACHE": str(cache_root / "modules"),
+            "HUGGINGFACE_HUB_CACHE": str(cache_root / "hub"),
+            "TRANSFORMERS_CACHE": str(cache_root / "transformers"),
+        }
+    )
     payload = {
         "mesh_path": str(mesh),
         "image": str(image),
