@@ -47,7 +47,7 @@ def _graph_acceptance(records: object) -> dict[str, tuple[bool, str]]:
     }
 
 
-def validate_job(manifest: JobManifest, job_dir: Path) -> dict[str, Any]:
+def validate_job(manifest: JobManifest, job_dir: Path, require_full_acceptance: bool = False) -> dict[str, Any]:
     checks: list[dict[str, Any]] = []
     for stage in REQUIRED_STAGES:
         record = manifest.stages.get(stage.value)
@@ -101,6 +101,31 @@ def validate_job(manifest: JobManifest, job_dir: Path) -> dict[str, Any]:
         target_count = len(ik_result.get("targets", [])) if isinstance(ik_result, dict) else 0
         constraint_count = len(ik_result.get("constraints", [])) if isinstance(ik_result, dict) else 0
         _check(checks, "ik:targets", "Equipment IK targets", ik is not None and ik.status is StageStatus.READY and target_count > 0 and constraint_count > 0, f"{target_count} target(s), {constraint_count} constraint(s)")
+
+    if require_full_acceptance:
+        processed_views = {
+            slot.view
+            for slot in manifest.references.values()
+            if slot.processed_path and slot.quality and slot.quality.get("level") != "ERROR"
+        }
+        _check(checks, "full:four-views", "Four validated reference views", processed_views == {"front", "left", "back", "right"}, ", ".join(sorted(processed_views)) or "none")
+
+        geometry_result = manifest.stages.get(StageName.GEOMETRY.value).result if manifest.stages.get(StageName.GEOMETRY.value) else {}
+        provider_views = set(geometry_result.get("provider_views", [])) if isinstance(geometry_result, dict) else set()
+        _check(checks, "full:multiview", "Official multiview geometry", manifest.actual_provider == "HunyuanMultiviewProvider" and provider_views == {"front", "left", "back", "right"}, f"{manifest.actual_provider or 'unknown'} / {', '.join(sorted(provider_views)) or 'no provider views'}")
+
+        reference_result = manifest.stages.get(StageName.REFERENCES.value).result if manifest.stages.get(StageName.REFERENCES.value) else {}
+        consistency = reference_result.get("view_consistency", {}) if isinstance(reference_result, dict) else {}
+        _check(checks, "full:view-consistency", "DINOv3 view consistency", consistency.get("level") == "GOOD", consistency.get("level", "not measured"))
+
+        selected_assets = {asset.lower() for asset in manifest.equipment_assets}
+        _check(checks, "full:sword", "Sword equipment path", any("sword" in asset for asset in selected_assets), ", ".join(sorted(selected_assets)) or "no sword selected")
+        _check(checks, "full:rifle", "Rifle equipment path", any("rifle" in asset for asset in selected_assets), ", ".join(sorted(selected_assets)) or "no rifle selected")
+        clothing = manifest.stages.get(StageName.CLOTHING.value)
+        _check(checks, "full:clothing", "Clothing transfer path", bool(manifest.clothing_assets) and clothing is not None and clothing.status is StageStatus.READY, ", ".join(manifest.clothing_assets) or "no clothing selected")
+        ik = manifest.stages.get(StageName.IK.value)
+        ik_result = ik.result if ik else {}
+        _check(checks, "full:ik", "IK validation path", ik is not None and ik.status is StageStatus.READY and bool(ik_result.get("targets")) and bool(ik_result.get("constraints")), "ready" if ik and ik.status is StageStatus.READY else "not ready")
 
     passed = all(bool(item["passed"]) for item in checks)
     return {

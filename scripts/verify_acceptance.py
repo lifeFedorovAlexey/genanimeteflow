@@ -8,8 +8,8 @@ from app.job_store import JobStore
 
 
 def main() -> int:
-    if len(sys.argv) != 2:
-        print("usage: verify_acceptance.py JOB_ID", file=sys.stderr)
+    if len(sys.argv) not in {2, 3} or (len(sys.argv) == 3 and sys.argv[2] != "--full"):
+        print("usage: verify_acceptance.py JOB_ID [--full]", file=sys.stderr)
         return 2
     store = JobStore()
     try:
@@ -17,7 +17,7 @@ def main() -> int:
     except (FileNotFoundError, ValueError):
         print(json.dumps({"valid": False, "error": "Job not found"}, ensure_ascii=False))
         return 1
-    result = validate_job(manifest, store.job_dir(manifest.job_id))
+    result = validate_job(manifest, store.job_dir(manifest.job_id), require_full_acceptance=len(sys.argv) == 3)
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0 if result["valid"] else 1
 

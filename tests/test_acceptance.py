@@ -81,6 +81,31 @@ class AcceptanceTests(unittest.TestCase):
             self.assertFalse(graph_check["passed"])
             self.assertIn("jump_start", graph_check["detail"])
 
+    def test_full_acceptance_rejects_single_view_job(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            manifest, job_dir = self._ready_manifest(Path(temporary))
+            result = validate_job(manifest, job_dir, require_full_acceptance=True)
+            self.assertFalse(result["valid"])
+            self.assertFalse(next(check for check in result["checks"] if check["id"] == "full:four-views")["passed"])
+
+    def test_full_acceptance_requires_multiview_and_quality_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            manifest, job_dir = self._ready_manifest(Path(temporary))
+            for view in ("left", "back", "right"):
+                manifest.references[view] = ReferenceSlot(view=view, original_path=f"references/original/{view}.png", processed_path=f"references/processed/{view}.png", quality={"level": "GOOD"})
+                (job_dir / f"references/original/{view}.png").write_bytes(b"input")
+            manifest.references["front"].processed_path = "references/processed/front.png"
+            manifest.references["front"].quality = {"level": "GOOD"}
+            manifest.actual_provider = "HunyuanMultiviewProvider"
+            manifest.stages[StageName.GEOMETRY.value].result = {"provider_views": ["front", "left", "back", "right"]}
+            manifest.stages[StageName.REFERENCES.value].result = {"view_consistency": {"level": "GOOD"}}
+            manifest.equipment_assets = ["cc0-fantasy-sword", "cc0-lightning-rifle"]
+            manifest.clothing_assets = ["utility-vest"]
+
+            result = validate_job(manifest, job_dir, require_full_acceptance=True)
+
+            self.assertTrue(result["valid"])
+
 
 if __name__ == "__main__":
     unittest.main()
