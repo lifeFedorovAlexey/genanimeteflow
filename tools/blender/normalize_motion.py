@@ -58,7 +58,7 @@ def _detect_root_motion(action: object, mapping: dict[str, tuple[str, str]]) -> 
     frame_start = float(action.frame_range[0])
     frame_end = float(action.frame_range[1])
     displacement = 0.0
-    for curve in action.fcurves:
+    for curve in _action_fcurves(action):
         if "location" not in curve.data_path.lower():
             continue
         path = curve.data_path.lower()
@@ -66,6 +66,25 @@ def _detect_root_motion(action: object, mapping: dict[str, tuple[str, str]]) -> 
             continue
         displacement += abs(float(curve.evaluate(frame_end)) - float(curve.evaluate(frame_start)))
     return displacement > 0.02
+
+
+def _action_fcurves(action: object) -> list[object]:
+    """Return action curves across Blender 3.x and Blender 5.x APIs."""
+    legacy = getattr(action, "fcurves", None)
+    if legacy is not None:
+        return list(legacy)
+    curves: list[object] = []
+    slots = list(getattr(action, "slots", []))
+    for layer in getattr(action, "layers", []):
+        for strip in getattr(layer, "strips", []):
+            for slot in slots:
+                try:
+                    channelbag = strip.channelbag(slot)
+                except (AttributeError, RuntimeError, TypeError):
+                    continue
+                if channelbag is not None:
+                    curves.extend(channelbag.fcurves)
+    return curves
 
 
 def _armature(objects: list[object], role: str) -> object:
