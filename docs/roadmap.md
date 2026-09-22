@@ -41,7 +41,7 @@ Each checked item must have working code, automated coverage where practical, a 
 - [x] Add Blender rigid-equipment socket attachment stage with output and skeleton validation (skinned clothing and IK remain separate stages)
 - [x] Load validated GLB assets in Unit Tester with embedded clip playback, WASD movement states and wireframe/skeleton debug toggles
 - [x] Implement GLB/FBX export worker and manifest roundtrip validation (runtime requires Blender and selected normalized actions)
-- [ ] Harden recovery, cancellation, cache cleanup, security and full acceptance test (recovery/cancellation/cache cleanup, acceptance verifier and path-boundary tests are implemented; end-to-end fresh-run sign-off remains)
+- [ ] Harden recovery, cancellation, cache cleanup, security and full acceptance test (recovery/cancellation/cache cleanup, acceptance verifier, strict `scripts/verify_acceptance.py JOB_ID --full` gate and path-boundary tests are implemented; end-to-end fresh-run with four user reference views remains)
 
 ## Commit convention
 
