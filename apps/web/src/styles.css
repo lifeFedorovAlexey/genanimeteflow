@@ -67,6 +67,11 @@
 .action-buttons button { margin-top: 10px; padding: 5px 8px; color: #c8d4ff; background: #1a2440; border: 1px solid #3b4d7e; border-radius: 5px; font-size: 10px; }
 .binding-settings { margin-top: 8px; }
 .binding-settings summary { cursor: pointer; color: #aebeff; }
+.diagnostics-settings { width: 100%; margin-top: 4px; padding-top: 8px; border-top: 1px solid #252d38; }
+.diagnostics-settings summary { color: #8794aa; }
+.diagnostic-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin-top: 8px; padding: 9px; border: 1px solid #303b4b; border-radius: 6px; background: #10151c; }
+.diagnostic-actions .secondary { margin: 0; padding: 5px 8px; font-size: 10px; }
+.diagnostic-actions .debug-toggle { margin-top: 0; }
 .binding-grid { display: grid; grid-template-columns: repeat(2, minmax(110px, 1fr)); gap: 6px; margin-top: 7px; }
 .binding-grid button { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 7px; color: #aeb8c8; background: #10151c; border: 1px solid #303b4b; border-radius: 4px; font-size: 10px; text-align: left; }
 .binding-grid button.capturing { border-color: #8ea8ff; color: #e4eaff; }
