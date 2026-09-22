@@ -45,7 +45,7 @@ class ProcessManager:
                 process.kill()
             process.wait(timeout=5)
         except (OSError, subprocess.TimeoutExpired):
-            pass
+            return
 
     def run_json_worker(
         self,
