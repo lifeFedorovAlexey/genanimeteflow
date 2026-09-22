@@ -52,6 +52,22 @@ def _mapping(source: object, target: object) -> dict[str, tuple[str, str]]:
     return mapping
 
 
+def _detect_root_motion(action: object, mapping: dict[str, tuple[str, str]]) -> bool:
+    """Detect meaningful translation on the source root/hips track."""
+    source_names = {name.lower() for name in (mapping.get("root", (None, None))[0], mapping.get("hips", (None, None))[0]) if name}
+    frame_start = float(action.frame_range[0])
+    frame_end = float(action.frame_range[1])
+    displacement = 0.0
+    for curve in action.fcurves:
+        if "location" not in curve.data_path.lower():
+            continue
+        path = curve.data_path.lower()
+        if "pose.bones[" in path and not any(name in path for name in source_names):
+            continue
+        displacement += abs(float(curve.evaluate(frame_end)) - float(curve.evaluate(frame_start)))
+    return displacement > 0.02
+
+
 def _armature(objects: list[object], role: str) -> object:
     armatures = [obj for obj in objects if obj.type == "ARMATURE"]
     if len(armatures) != 1:
@@ -94,6 +110,7 @@ def run(request: dict) -> dict:
     if action is None:
         raise RuntimeError(f"Motion action does not exist: {action_name}")
     mapping = _mapping(source, target)
+    detected_root_motion = _detect_root_motion(action, mapping)
     source.animation_data_create()
     source.animation_data.action = action
     target.animation_data_create()
@@ -131,7 +148,7 @@ def run(request: dict) -> dict:
     if not output_path.is_file() or output_path.stat().st_size == 0:
         raise RuntimeError("Blender did not create normalized motion output")
     roundtrip = _roundtrip(output_path, baked_action_name)
-    return {"ok": True, "action": action_name, "normalized_action": baked_action_name, "canonical_mapping": {key: {"source": value[0], "target": value[1]} for key, value in mapping.items()}, "frame_start": frame_start, "frame_end": frame_end, "roundtrip": roundtrip}
+    return {"ok": True, "action": action_name, "normalized_action": baked_action_name, "root_motion": detected_root_motion, "canonical_mapping": {key: {"source": value[0], "target": value[1]} for key, value in mapping.items()}, "frame_start": frame_start, "frame_end": frame_end, "roundtrip": roundtrip}
 
 
 def _request_path() -> Path:
