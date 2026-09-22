@@ -29,18 +29,22 @@ def _command_output(command: list[str], timeout: float = 5.0) -> str | None:
 
 def _nvidia() -> dict[str, Any]:
     output = _command_output([
-        "nvidia-smi", "--query-gpu=name,memory.total,driver_version,compute_cap", "--format=csv,noheader,nounits"
+        "nvidia-smi", "--query-gpu=name,memory.total,memory.used,driver_version,compute_cap", "--format=csv,noheader,nounits"
     ])
     gpus: list[dict[str, Any]] = []
     if output:
         for line in output.splitlines():
             fields = [part.strip() for part in line.split(",")]
-            if len(fields) >= 4:
+            if len(fields) >= 5:
                 try:
                     memory_mb = float(fields[1])
                 except ValueError:
                     memory_mb = None
-                gpus.append({"name": fields[0], "vram_mb": memory_mb, "driver": fields[2], "compute_capability": fields[3]})
+                try:
+                    used_memory_mb = float(fields[2])
+                except ValueError:
+                    used_memory_mb = None
+                gpus.append({"name": fields[0], "vram_mb": memory_mb, "used_vram_mb": used_memory_mb, "driver": fields[3], "compute_capability": fields[4]})
     return {"available": bool(gpus), "gpus": gpus, "nvml_available": bool(output)}
 
 
