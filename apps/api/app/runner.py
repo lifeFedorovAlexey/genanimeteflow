@@ -93,7 +93,7 @@ class PipelineRunner:
         started = record.started_at
         try:
             logger.info("Stage started: %s", stage.value)
-            heavy_stages = {StageName.GEOMETRY, StageName.RETOPOLOGY, StageName.RIG, StageName.EQUIPMENT, StageName.IK, StageName.MOTIONS, StageName.EXPORT}
+            heavy_stages = {StageName.GEOMETRY, StageName.RETOPOLOGY, StageName.RIG, StageName.CLOTHING, StageName.EQUIPMENT, StageName.IK, StageName.MOTIONS, StageName.EXPORT}
             if stage in heavy_stages:
                 await self.queue.run(lambda: self._execute_stage(manifest, stage, logger, log_path))
             else:
@@ -135,6 +135,8 @@ class PipelineRunner:
             await self._retopology(manifest, logger, log_path)
         elif stage is StageName.RIG:
             await self._rig(manifest, logger, log_path)
+        elif stage is StageName.CLOTHING:
+            await self._clothing(manifest, logger, log_path)
         elif stage is StageName.EQUIPMENT:
             await self._equipment(manifest, logger, log_path)
         elif stage is StageName.IK:
@@ -400,11 +402,13 @@ class PipelineRunner:
         if not blender:
             raise WorkerFailure("BLENDER_MISSING", "Blender executable was not found")
         job_dir = self.store.job_dir(manifest.job_id)
+        clothing = manifest.stages[StageName.CLOTHING.value]
+        clothing_mesh = clothing.result.get("mesh_path") if clothing.status is StageStatus.READY else None
         equipment = manifest.stages[StageName.EQUIPMENT.value]
         equipment_mesh = equipment.result.get("mesh_path") if equipment.status is StageStatus.READY else None
         ik = manifest.stages[StageName.IK.value]
         ik_mesh = ik.result.get("mesh_path") if ik.status is StageStatus.READY else None
-        source_mesh = job_dir / (ik_mesh if isinstance(ik_mesh, str) else equipment_mesh if isinstance(equipment_mesh, str) else mesh_value)
+        source_mesh = job_dir / (ik_mesh if isinstance(ik_mesh, str) else equipment_mesh if isinstance(equipment_mesh, str) else clothing_mesh if isinstance(clothing_mesh, str) else mesh_value)
         motions = manifest.stages[StageName.MOTIONS.value]
         normalized_by_action = {str(item.get("worker", {}).get("normalized_action")): str(item["mesh_path"]) for item in motions.result.get("clips", []) if item.get("mesh_path")}
         missing_actions = [action for action in manifest.export_actions if action not in normalized_by_action]
@@ -464,7 +468,9 @@ class PipelineRunner:
             if not asset_path.is_file():
                 raise WorkerFailure("EQUIPMENT_SOURCE_MISSING", f"Equipment source does not exist: {asset_path}")
         output_mesh = job_dir / "equipment" / "attached.glb"
-        request = {"target_rig": str(job_dir / mesh_value), "output_mesh": str(output_mesh), "assets": assets}
+        clothing = manifest.stages[StageName.CLOTHING.value]
+        clothing_mesh = clothing.result.get("mesh_path") if clothing.status is StageStatus.READY else None
+        request = {"target_rig": str(job_dir / (clothing_mesh if isinstance(clothing_mesh, str) else mesh_value)), "output_mesh": str(output_mesh), "assets": assets}
         logger.info("Attaching %s equipment assets", len(assets))
         result = await asyncio.to_thread(self.process_manager.run_json_worker, [sys.executable, "-m", "workers.blender.equipment_worker"], request, REPO_ROOT, {"BLENDER_PATH": blender}, log_path, process_key=f"{manifest.job_id}:{StageName.EQUIPMENT.value}")
         report = validate_glb(output_mesh, require_skeleton=True)
@@ -473,6 +479,35 @@ class PipelineRunner:
             raise WorkerFailure("EQUIPMENT_OUTPUT_INVALID", "; ".join(report.errors + rig_report.errors))
         manifest.stages[StageName.EQUIPMENT.value].result = {"mesh_path": str(output_mesh.relative_to(job_dir)), "assets": assets, "sockets": result.payload.get("sockets", []), "worker": result.payload, "validation": {"glb": report.__dict__, "rig": rig_report.__dict__}}
         logger.info("Equipment output saved: %s", output_mesh)
+
+    async def _clothing(self, manifest: JobManifest, logger: logging.Logger, log_path: Path) -> None:
+        if not manifest.clothing_assets:
+            raise RuntimeError("Select at least one skinned clothing asset before weight transfer")
+        rig = manifest.stages[StageName.RIG.value]
+        rig_value = rig.result.get("mesh_path")
+        if rig.status is not StageStatus.READY or not isinstance(rig_value, str):
+            raise RuntimeError("Rig must be READY before clothing transfer")
+        blender = blender_path()
+        if not blender:
+            raise WorkerFailure("BLENDER_MISSING", "Blender executable was not found")
+        job_dir = self.store.job_dir(manifest.job_id)
+        assets = EquipmentLibrary().selected_assets(manifest.clothing_assets)
+        for asset in assets:
+            if asset.get("asset_type") not in {"CLOTHING_SKINNED", "ARMOR_SKINNED", "ACCESSORY_SKINNED"}:
+                raise WorkerFailure("CLOTHING_TYPE_INVALID", f"Asset is not skinned clothing: {asset.get('id')}")
+            asset_path = Path(str(asset["asset_path"]))
+            if not asset_path.is_file():
+                raise WorkerFailure("CLOTHING_SOURCE_MISSING", f"Clothing source does not exist: {asset_path}")
+        output_mesh = job_dir / "clothing" / "skinned.glb"
+        request = {"target_rig": str(job_dir / rig_value), "output_mesh": str(output_mesh), "assets": assets}
+        logger.info("Transferring weights for %s clothing assets", len(assets))
+        result = await asyncio.to_thread(self.process_manager.run_json_worker, [sys.executable, "-m", "workers.blender.clothing_worker"], request, REPO_ROOT, {"BLENDER_PATH": blender}, log_path, process_key=f"{manifest.job_id}:{StageName.CLOTHING.value}")
+        report = validate_glb(output_mesh, require_skeleton=True)
+        rig_report = validate_rigged_glb(output_mesh, require_canonical=True)
+        if not report.valid or not rig_report.valid:
+            raise WorkerFailure("CLOTHING_OUTPUT_INVALID", "; ".join(report.errors + rig_report.errors))
+        manifest.stages[StageName.CLOTHING.value].result = {"mesh_path": str(output_mesh.relative_to(job_dir)), "assets": assets, "transfer": result.payload.get("transfer", []), "clipping": result.payload.get("clipping", []), "worker": result.payload, "validation": {"glb": report.__dict__, "rig": rig_report.__dict__}}
+        logger.info("Skinned clothing output saved: %s", output_mesh)
 
     async def _motions(self, manifest: JobManifest, logger: logging.Logger, log_path: Path) -> None:
         if not manifest.motion_clips:

@@ -23,6 +23,7 @@ class StageName(str, Enum):
     TEXTURES = "textures"
     RETOPOLOGY = "retopology"
     RIG = "rig"
+    CLOTHING = "clothing"
     EQUIPMENT = "equipment"
     IK = "ik"
     MOTIONS = "motions"
@@ -63,6 +64,7 @@ class JobManifest(BaseModel):
     stages: dict[str, StageRecord] = Field(default_factory=dict)
     pipeline_version: str = "0.1.0"
     equipment_assets: list[str] = Field(default_factory=list)
+    clothing_assets: list[str] = Field(default_factory=list)
     motion_clips: list[str] = Field(default_factory=list)
     export_actions: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
@@ -101,6 +103,10 @@ class MotionSelectionRequest(BaseModel):
 
 
 class EquipmentSelectionRequest(BaseModel):
+    assets: list[str] = Field(default_factory=list)
+
+
+class ClothingSelectionRequest(BaseModel):
     assets: list[str] = Field(default_factory=list)
 
 

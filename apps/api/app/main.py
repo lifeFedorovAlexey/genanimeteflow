@@ -19,7 +19,7 @@ from .model_registry import ModelRegistry
 from .motion_library import MotionLibrary, MotionLibraryError
 from .pipeline_graph import STAGE_DEPENDENCIES
 from .runner import PipelineRunner, SingleGpuQueue
-from .schemas import AnimationGraphRequest, EquipmentRegisterRequest, EquipmentSelectionRequest, ExportSelectionRequest, JobCreateRequest, JobManifest, MotionRegisterRequest, MotionSelectionRequest, ReferenceSlot, Settings, StageName
+from .schemas import AnimationGraphRequest, ClothingSelectionRequest, EquipmentRegisterRequest, EquipmentSelectionRequest, ExportSelectionRequest, JobCreateRequest, JobManifest, MotionRegisterRequest, MotionSelectionRequest, ReferenceSlot, Settings, StageName
 from .storage import atomic_write_json, read_json
 from .schemas import StageStatus
 
@@ -85,6 +85,25 @@ def set_equipment_selection(job_id: str, request: EquipmentSelectionRequest) -> 
         manifest.stages[StageName.EQUIPMENT.value].status = StageStatus.INVALIDATED
     manifest.stages[StageName.EQUIPMENT.value].error_category = "UPSTREAM_CHANGED"
     manifest.stages[StageName.EQUIPMENT.value].error_message = "Equipment selection changed; attach the selected assets"
+    store.save(manifest)
+    return manifest
+
+
+@app.put("/api/jobs/{job_id}/clothing-selection", response_model=JobManifest)
+def set_clothing_selection(job_id: str, request: ClothingSelectionRequest) -> JobManifest:
+    manifest = get_job(job_id)
+    try:
+        selected = EquipmentLibrary().selected_assets(request.assets)
+    except EquipmentLibraryError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    invalid = [str(asset["id"]) for asset in selected if asset.get("asset_type") not in {"CLOTHING_SKINNED", "ARMOR_SKINNED", "ACCESSORY_SKINNED"}]
+    if invalid:
+        raise HTTPException(status_code=400, detail="Only skinned clothing/armor/accessories may be selected: " + ", ".join(invalid))
+    manifest.clothing_assets = request.assets
+    store.invalidate_from(manifest, StageName.CLOTHING)
+    manifest.stages[StageName.CLOTHING.value].status = StageStatus.INVALIDATED
+    manifest.stages[StageName.CLOTHING.value].error_category = "UPSTREAM_CHANGED"
+    manifest.stages[StageName.CLOTHING.value].error_message = "Clothing selection changed; transfer weights onto the character rig"
     store.save(manifest)
     return manifest
 

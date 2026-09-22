@@ -15,6 +15,7 @@ def build_unit_manifest(job: JobManifest, job_dir: Path, glb_path: Path, fbx_pat
     rig = job.stages.get("rig")
     motions = job.stages.get("motions")
     equipment = job.stages.get("equipment")
+    clothing = job.stages.get("clothing")
     ik = job.stages.get("ik")
     equipment_result = equipment.result if equipment else {}
     exported_glb = roundtrip.get("glb", {}) if isinstance(roundtrip, dict) else {}
@@ -47,6 +48,7 @@ def build_unit_manifest(job: JobManifest, job_dir: Path, glb_path: Path, fbx_pat
         "animations": job.export_actions,
         "motion_sources": motion_sources,
         "equipment": equipment_result.get("assets", []),
+        "clothing": clothing.result.get("assets", []) if clothing else [],
         "sockets": equipment_result.get("sockets", []),
         "ik_settings": {
             **(ik.result.get("settings", {}) if ik else {}),

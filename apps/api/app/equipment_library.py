@@ -48,7 +48,10 @@ class EquipmentLibrary:
             raise EquipmentLibraryError(f"Unsupported equipment type: {asset_type}")
         if asset_type == "WEAPON" and not primary_socket:
             raise EquipmentLibraryError("Weapons require a primary_socket")
-        report = validate_glb(source, require_skeleton=asset_type in SKINNED_TYPES)
+        # Clothing may arrive as an unskinned garment. The clothing worker
+        # transfers weights onto the generated canonical rig; requiring a
+        # source skeleton here would reject the normal authoring workflow.
+        report = validate_glb(source, require_skeleton=False)
         if not report.valid:
             raise EquipmentLibraryError("Equipment GLB validation failed: " + "; ".join(report.errors))
         destination = (self.root / asset_id).resolve()
