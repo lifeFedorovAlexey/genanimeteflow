@@ -31,4 +31,15 @@
 .stage-status.working { color: #a9bbff; }
 .stage-action { min-width: 95px; }
 .stage-action:disabled { color: #687383; background: #161a20; border-color: #2c333d; }
+.motion-library { margin-top: 16px; }
+.motion-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; max-height: 250px; overflow: auto; padding: 2px; margin-top: 16px; }
+.motion-card { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 5px; min-height: 68px; padding: 11px 10px 9px 31px; color: #c9d2df; background: #11161e; border: 1px solid #2d3745; border-radius: 7px; text-align: left; }
+.motion-card:hover { border-color: #718bd0; background: #172033; }
+.motion-card.selected { color: #edf2ff; background: #1b2b27; border-color: #5fc694; }
+.motion-card strong { font-size: 11px; line-height: 1.2; }
+.motion-card small { color: #7f8b9d; font-size: 10px; }
+.motion-check { position: absolute; left: 10px; top: 11px; color: #85a3ff; font-size: 14px; }
+.motion-card.selected .motion-check { color: #69dba3; }
+.subsection-head { display: flex; justify-content: space-between; align-items: center; margin-top: 20px; padding-top: 16px; border-top: 1px solid #2a323d; }
+.export-grid { max-height: none; margin-top: 11px; }
 @keyframes pulse { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }

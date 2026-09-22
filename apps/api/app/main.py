@@ -54,7 +54,9 @@ def get_models() -> list[dict]:
 
 @app.get("/api/motions")
 def get_motions() -> dict:
-    return MotionLibrary().catalog()
+    library = MotionLibrary()
+    catalog = library.catalog()
+    return {**catalog, "available_clips": list(library.clips().values())}
 
 
 @app.get("/api/equipment")
@@ -94,6 +96,10 @@ def register_motion_library(request: MotionRegisterRequest) -> dict:
 def set_export_selection(job_id: str, request: ExportSelectionRequest) -> JobManifest:
     manifest = get_job(job_id)
     manifest.export_actions = request.actions
+    if manifest.stages[StageName.EXPORT.value].status is StageStatus.READY:
+        manifest.stages[StageName.EXPORT.value].status = StageStatus.INVALIDATED
+        manifest.stages[StageName.EXPORT.value].error_category = "UPSTREAM_CHANGED"
+        manifest.stages[StageName.EXPORT.value].error_message = "Export selection changed; export the selected actions"
     store.save(manifest)
     return manifest
 
@@ -106,6 +112,11 @@ def set_motion_selection(job_id: str, request: MotionSelectionRequest) -> JobMan
     except MotionLibraryError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     manifest.motion_clips = request.clips
+    store.invalidate_from(manifest, StageName.MOTIONS)
+    if manifest.stages[StageName.MOTIONS.value].status is StageStatus.READY:
+        manifest.stages[StageName.MOTIONS.value].status = StageStatus.INVALIDATED
+    manifest.stages[StageName.MOTIONS.value].error_category = "UPSTREAM_CHANGED"
+    manifest.stages[StageName.MOTIONS.value].error_message = "Motion selection changed; normalize the selected clips"
     store.save(manifest)
     return manifest
 
