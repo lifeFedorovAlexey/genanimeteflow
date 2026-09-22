@@ -234,3 +234,31 @@ class AnimationGraph:
             if upper:
                 layers.append({"name": "upper_body", "clip_id": upper.id, "weight": 1.0, "mask": "spine_to_hands"})
         return AnimationOutput(state=state, clip_id=clip.id, blend=max(float(item["weight"]) for item in blend_tree), normalized_time=normalized_time, root_motion=use_root_motion, reason=reason, action_name=clip.name, direction_degrees=inputs.direction_degrees, transition=transition, transition_duration=transition_duration, layers=tuple(layers), root_motion_mode="apply" if use_root_motion else "in_place", additive_clip_id=additive.id if additive else None, blend_tree=blend_tree)
+
+
+def motion_clips_from_records(records: Iterable[dict]) -> tuple[MotionClip, ...]:
+    """Convert normalized worker records into the graph's canonical clip model."""
+    clips: list[MotionClip] = []
+    for item in records:
+        if not isinstance(item, dict):
+            continue
+        worker = item.get("worker") if isinstance(item.get("worker"), dict) else {}
+        root_motion = item.get("root_motion")
+        if root_motion is None:
+            root_motion = item.get("rootMotion")
+        if root_motion is None:
+            root_motion = worker.get("root_motion")
+        clips.append(MotionClip(
+            id=str(item["clip_id"]),
+            name=str(worker.get("normalized_action") or item["action"]),
+            category=str(item.get("category") or item["action"]),
+            duration=float(item.get("duration") or 1.0),
+            loop=bool(item.get("loop", False)),
+            required_equipment_type=item.get("required_equipment_type"),
+            direction_degrees=item.get("direction_degrees"),
+            layer=str(item.get("layer") or "base"),
+            additive=bool(item.get("additive", False)),
+            root_motion=bool(root_motion) if root_motion is not None else False,
+            speed=item.get("speed"),
+        ))
+    return tuple(clips)

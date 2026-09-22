@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from .animation_graph import AnimationGraph, AnimationInput, motion_clips_from_records
 from .schemas import JobManifest, StageName, StageStatus
 
 
@@ -28,6 +29,37 @@ def _safe_job_file(job_dir: Path, relative_path: object) -> Path | None:
     if job_dir.resolve() not in candidate.parents:
         return None
     return candidate
+
+
+def _graph_acceptance(records: object) -> dict[str, tuple[bool, str]]:
+    if not isinstance(records, list):
+        return {"graph:states": (False, "normalized motion records are missing")}
+    clips = motion_clips_from_records(records)
+    if not clips:
+        return {"graph:states": (False, "normalized motion records are empty")}
+    graph = AnimationGraph(clips)
+    cases = {
+        "idle": AnimationInput(),
+        "walk": AnimationInput(speed=1.0),
+        "run": AnimationInput(speed=2.0),
+        "sprint": AnimationInput(speed=3.0, sprinting=True),
+        "crouch": AnimationInput(crouched=True),
+        "jump_start": AnimationInput(grounded=False, vertical_velocity=2.0),
+        "jump_air": AnimationInput(grounded=False, vertical_velocity=0.0),
+        "fall": AnimationInput(grounded=False, vertical_velocity=-2.0),
+        "jump_land": AnimationInput(previous_state="fall"),
+    }
+    outputs = {state: graph.evaluate(inputs) for state, inputs in cases.items()}
+    missing = [state for state, output in outputs.items() if output.state != state or output.clip_id is None]
+    transition = graph.evaluate(AnimationInput(speed=1.0, previous_state="idle"))
+    attack = graph.evaluate(AnimationInput(action="attack", action_time=0.3))
+    return {
+        "graph:states": (not missing, f"{len(clips)} clips; missing playable states: {', '.join(missing) or 'none'}"),
+        "graph:transitions": (transition.transition == "idle->walk" and transition.transition_duration > 0, f"{transition.transition or 'none'} / {transition.transition_duration:.3f}s"),
+        "graph:combat": (attack.clip_id is not None, attack.action_name or "no compatible attack clip"),
+        "graph:layers": (bool(transition.layers) and transition.layers[0].get("mask") == "full_body", f"{len(transition.layers)} layer(s), base mask={transition.layers[0].get('mask') if transition.layers else 'missing'}"),
+        "graph:root-motion": (transition.root_motion_mode in {"apply", "in_place"}, transition.root_motion_mode),
+    }
 
 
 def validate_job(manifest: JobManifest, job_dir: Path) -> dict[str, Any]:
@@ -67,6 +99,10 @@ def validate_job(manifest: JobManifest, job_dir: Path) -> dict[str, Any]:
     _check(checks, "asset:textures", "Embedded textures", texture_count > 0, f"{texture_count} texture(s)")
     _check(checks, "asset:skin", "Skinned skeleton", bool(glb_validation.get("skin_count", 0)) and joint_count > 0, f"{joint_count} joint(s)")
     _check(checks, "asset:animations", "Selected animations", bool(selected_actions) and animation_count >= len(selected_actions), f"{animation_count} clip(s), {len(selected_actions)} selected")
+
+    motion_result = manifest.stages.get(StageName.MOTIONS.value).result if manifest.stages.get(StageName.MOTIONS.value) else {}
+    for check_id, (passed, detail) in _graph_acceptance(motion_result.get("clips", []) if isinstance(motion_result, dict) else None).items():
+        _check(checks, check_id, check_id.removeprefix("graph:").replace("-", " ").title(), passed, detail)
 
     if manifest.equipment_assets:
         equipment = manifest.stages.get(StageName.EQUIPMENT.value)

@@ -5,10 +5,16 @@ from datetime import UTC, datetime
 from unittest.mock import patch
 
 from app import main
+from app.animation_graph import motion_clips_from_records
 from app.schemas import AnimationGraphRequest, JobManifest, StageName, StageRecord, StageStatus
 
 
 class AnimationGraphApiTests(unittest.TestCase):
+    def test_normalized_records_share_one_graph_conversion_contract(self) -> None:
+        clips = motion_clips_from_records([{"clip_id": "jump", "action": "Jump_Loop", "category": "jump", "duration": 1.0, "rootMotion": False, "worker": {"normalized_action": "normalized_Jump_Loop"}}])
+        self.assertEqual(clips[0].name, "normalized_Jump_Loop")
+        self.assertFalse(clips[0].root_motion)
+
     def test_endpoint_uses_normalized_job_clips(self) -> None:
         now = datetime.now(UTC)
         manifest = JobManifest(

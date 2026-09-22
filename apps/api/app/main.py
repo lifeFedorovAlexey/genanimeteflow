@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 
 from .config import ensure_directories
-from .animation_graph import AnimationGraph, AnimationInput, MotionClip
+from .animation_graph import AnimationGraph, AnimationInput, motion_clips_from_records
 from .capabilities import capabilities
 from .cache import clean as clean_cache, inventory as cache_inventory
 from .acceptance import validate_job
@@ -167,15 +167,7 @@ def evaluate_animation_graph(job_id: str, request: AnimationGraphRequest) -> dic
     motions = manifest.stages[StageName.MOTIONS.value]
     if motions.status.value != "READY":
         raise HTTPException(status_code=409, detail="Animation graph requires READY normalized motions")
-    clips: list[MotionClip] = []
-    for item in motions.result.get("clips", []):
-        worker = item.get("worker", {})
-        root_motion = item.get("root_motion")
-        if root_motion is None:
-            root_motion = item.get("rootMotion")
-        if root_motion is None:
-            root_motion = worker.get("root_motion")
-        clips.append(MotionClip(id=str(item["clip_id"]), name=str(worker.get("normalized_action") or item["action"]), category=str(item.get("category") or item["action"]), duration=float(item.get("duration") or 1.0), loop=bool(item.get("loop", False)), required_equipment_type=item.get("required_equipment_type"), direction_degrees=item.get("direction_degrees"), layer=str(item.get("layer") or "base"), additive=bool(item.get("additive", False)), root_motion=bool(root_motion) if root_motion is not None else False, speed=item.get("speed")))
+    clips = motion_clips_from_records(motions.result.get("clips", []))
     if not clips:
         raise HTTPException(status_code=409, detail="Normalized motions contain no clips")
     output = AnimationGraph(clips).evaluate(AnimationInput(**request.model_dump()))

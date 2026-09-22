@@ -32,6 +32,20 @@ class AcceptanceTests(unittest.TestCase):
                 "rig": {"valid": True, "joint_count": 2},
             },
         }
+        manifest.stages[StageName.MOTIONS.value].result = {
+            "clips": [
+                {"clip_id": "idle", "action": "Idle_Loop", "category": "idle", "duration": 1.0, "worker": {"normalized_action": "normalized_Idle_Loop"}},
+                {"clip_id": "walk", "action": "Walk_Loop", "category": "walk", "duration": 1.0, "worker": {"normalized_action": "normalized_Walk_Loop"}},
+                {"clip_id": "sprint", "action": "Sprint_Loop", "category": "run", "duration": 1.0, "worker": {"normalized_action": "normalized_Sprint_Loop"}},
+                {"clip_id": "crouch", "action": "Crouch_Fwd_Loop", "category": "crouch", "duration": 1.0, "worker": {"normalized_action": "normalized_Crouch_Fwd_Loop"}},
+                {"clip_id": "jump-start", "action": "Jump_Start", "category": "jump", "duration": 1.0, "worker": {"normalized_action": "normalized_Jump_Start"}},
+                {"clip_id": "jump-air", "action": "Jump_Loop", "category": "jump", "duration": 1.0, "worker": {"normalized_action": "normalized_Jump_Loop"}},
+                {"clip_id": "jump-land", "action": "Jump_Land", "category": "jump", "duration": 1.0, "worker": {"normalized_action": "normalized_Jump_Land"}},
+                {"clip_id": "attack", "action": "Melee_Hook", "category": "attack", "duration": 1.0, "worker": {"normalized_action": "normalized_Melee_Hook"}},
+                {"clip_id": "hit", "action": "Hit_Knockback", "category": "attack", "duration": 1.0, "worker": {"normalized_action": "normalized_Hit_Knockback"}},
+                {"clip_id": "death", "action": "Death01", "category": "death", "duration": 1.0, "worker": {"normalized_action": "normalized_Death01"}},
+            ],
+        }
         manifest.equipment_assets = ["rifle"]
         manifest.clothing_assets = ["vest"]
         manifest.stages[StageName.IK.value].result = {"targets": [{"id": "hand_l"}], "constraints": [{"type": "IK"}]}
@@ -53,6 +67,19 @@ class AcceptanceTests(unittest.TestCase):
             result = validate_job(manifest, job_dir)
             self.assertFalse(result["valid"])
             self.assertFalse(next(check for check in result["checks"] if check["id"] == "export:glb")["passed"])
+
+    def test_acceptance_rejects_incomplete_animation_graph(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            manifest, job_dir = self._ready_manifest(Path(temporary))
+            manifest.stages[StageName.MOTIONS.value].result["clips"] = [
+                clip for clip in manifest.stages[StageName.MOTIONS.value].result["clips"]
+                if clip["category"] in {"idle", "walk", "run", "attack"}
+            ]
+            result = validate_job(manifest, job_dir)
+            graph_check = next(check for check in result["checks"] if check["id"] == "graph:states")
+            self.assertFalse(result["valid"])
+            self.assertFalse(graph_check["passed"])
+            self.assertIn("jump_start", graph_check["detail"])
 
 
 if __name__ == "__main__":
