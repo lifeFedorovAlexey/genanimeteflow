@@ -17,9 +17,14 @@ from app.pipeline_graph import downstream
 from app.runner import SingleGpuQueue
 from app.reference_pipeline import assess_reference, preprocess_reference
 from app.schemas import JobCreateRequest, StageName, StageStatus
+from pydantic import ValidationError
 
 
 class FoundationTests(unittest.TestCase):
+    def test_job_resolution_is_rejected_before_a_worker_starts(self) -> None:
+        with self.assertRaises(ValidationError):
+            JobCreateRequest(resolution=1024)
+
     def test_single_gpu_queue_serializes_operations(self) -> None:
         async def scenario() -> int:
             queue = SingleGpuQueue()

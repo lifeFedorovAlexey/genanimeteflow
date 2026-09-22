@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -73,7 +73,7 @@ class JobManifest(BaseModel):
 class JobCreateRequest(BaseModel):
     name: str = "Character Unit"
     profile: str = "BALANCED"
-    resolution: int = Field(default=512, pattern=None)
+    resolution: Literal[384, 512, 640, 768] = 512
     requested_provider: str = "AUTO"
 
 
