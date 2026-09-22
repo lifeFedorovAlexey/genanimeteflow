@@ -137,3 +137,5 @@ class AnimationGraphRequest(BaseModel):
     root_motion_enabled: bool = True
     upper_body_action: str | None = None
     emote: str | None = None
+    vertical_velocity: float = 0.0
+    transition_duration: float | None = None
