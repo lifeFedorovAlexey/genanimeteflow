@@ -36,6 +36,8 @@ def build_unit_manifest(job: JobManifest, job_dir: Path, glb_path: Path, fbx_pat
         "unit_id": job.job_id,
         "source_references": {view: slot.model_dump(mode="json") for view, slot in job.references.items()},
         "geometry_provider": job.actual_provider or job.requested_provider,
+        "requested_geometry_provider": job.requested_provider,
+        "fallback_reason": job.fallback_reason,
         "geometry_settings": geometry.result.get("settings", {}) if geometry else {},
         "texture_settings": textures.result.get("settings", {}) if textures else {},
         "retopology_settings": job.stages.get("retopology").result if job.stages.get("retopology") else {},
