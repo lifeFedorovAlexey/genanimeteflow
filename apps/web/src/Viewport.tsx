@@ -56,6 +56,7 @@ function DebugMarkers({ scene, showSockets, showIkTargets }: { scene: THREE.Obje
         ? new THREE.AxesHelper(0.12)
         : new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 8), new THREE.MeshBasicMaterial({ color: "#f2c15e" }));
       marker.name = `${object.name}__debug`;
+      marker.visible = isSocket ? showSockets : showIkTargets;
       object.add(marker);
       markers.push(marker);
     });
@@ -119,6 +120,7 @@ function NormalMarkers({ scene, visible }: { scene: THREE.Object3D; visible: boo
       geometry.setAttribute("position", new THREE.Float32BufferAttribute(points, 3));
       const lines = new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({ color: "#72d8ff" }));
       lines.name = `${object.name}__normals_debug`;
+      lines.visible = visible;
       lines.frustumCulled = false;
       object.add(lines);
       overlays.push(lines);
