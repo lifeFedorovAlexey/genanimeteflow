@@ -82,7 +82,12 @@ class AnimationGraph:
             return self._output(state, clip, inputs.action_time, True, "action state", inputs)
         if not inputs.grounded:
             state = "jump_start" if inputs.vertical_velocity > 0.1 else "jump_air" if inputs.vertical_velocity >= -0.1 else "fall"
-            clip = self._select(state, inputs.equipment_type, 0) or self._select("jump", inputs.equipment_type, 0)
+            if state == "jump_air":
+                clip = self._select("jump_air", inputs.equipment_type, 0) or self._select("jump_loop", inputs.equipment_type, 0) or self._select("jump", inputs.equipment_type, 0)
+            elif state == "fall":
+                clip = self._select("fall", inputs.equipment_type, 0) or self._select("jump_air", inputs.equipment_type, 0) or self._select("jump_loop", inputs.equipment_type, 0) or self._select("jump", inputs.equipment_type, 0)
+            else:
+                clip = self._select(state, inputs.equipment_type, 0) or self._select("jump", inputs.equipment_type, 0)
             return self._output(state, clip, 0.0, True, "not grounded", inputs)
         if inputs.previous_state in {"jump_start", "jump_air", "fall"}:
             clip = self._select("jump_land", inputs.equipment_type, 0) or self._select("jump", inputs.equipment_type, 0)

@@ -93,3 +93,15 @@ class AnimationGraphTests(unittest.TestCase):
         output = graph.evaluate(AnimationInput(previous_state="jump_air", transition_duration=0.42))
         self.assertEqual(output.state, "jump_land")
         self.assertEqual(output.transition_duration, 0.42)
+
+    def test_airborne_fallback_preserves_jump_phase(self) -> None:
+        clips = [
+            MotionClip("start", "Jump_Start", "jump", 1.0, False),
+            MotionClip("air", "Jump_Loop", "jump", 1.0, True),
+            MotionClip("land", "Jump_Land", "jump", 1.0, False),
+        ]
+        graph = AnimationGraph(clips)
+        air = graph.evaluate(AnimationInput(grounded=False, vertical_velocity=0.0))
+        fall = graph.evaluate(AnimationInput(grounded=False, vertical_velocity=-2.0))
+        self.assertEqual(air.action_name, "Jump_Loop")
+        self.assertEqual(fall.action_name, "Jump_Loop")
