@@ -10,13 +10,45 @@ from unittest.mock import patch
 from fastapi import HTTPException, UploadFile
 from starlette.datastructures import Headers
 from PIL import Image
+from PIL import ImageDraw
 
 from app import main
 from app.job_store import JobStore
 from app.schemas import JobCreateRequest, ReferenceSlot, RetopologySettingsRequest, StageStatus
+from app.reference_pipeline import assess_reference
 
 
 class ReferenceUploadTests(unittest.TestCase):
+    def test_reference_quality_reports_full_body_and_t_pose_metrics(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "front.png"
+            image = Image.new("RGBA", (128, 128), (0, 0, 0, 0))
+            draw = ImageDraw.Draw(image)
+            draw.rectangle((56, 10, 72, 118), fill=(255, 255, 255, 255))
+            draw.rectangle((18, 35, 110, 44), fill=(255, 255, 255, 255))
+            draw.rectangle((50, 82, 59, 121), fill=(255, 255, 255, 255))
+            draw.rectangle((69, 82, 78, 121), fill=(255, 255, 255, 255))
+            image.save(path)
+
+            quality = assess_reference(path)
+
+            self.assertEqual(quality["level"], "GOOD")
+            self.assertGreater(quality["silhouette"]["upper_body_span_ratio"], 0.9)
+            self.assertTrue(quality["silhouette"]["left_side_foreground"])
+            self.assertTrue(quality["silhouette"]["right_side_foreground"])
+
+    def test_reference_quality_warns_when_arms_are_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "front.png"
+            image = Image.new("RGBA", (128, 128), (0, 0, 0, 0))
+            ImageDraw.Draw(image).rectangle((55, 10, 73, 121), fill=(255, 255, 255, 255))
+            image.save(path)
+
+            quality = assess_reference(path)
+
+            self.assertEqual(quality["level"], "WARNING")
+            self.assertTrue(any("T-pose" in warning for warning in quality["warnings"]))
+
     def upload(self, job_id: str):
         image = BytesIO()
         Image.new("RGB", (8, 8), "blue").save(image, "PNG")
