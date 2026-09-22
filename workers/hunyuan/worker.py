@@ -8,7 +8,7 @@ from pathlib import Path
 from workers.common.worker_protocol import read_request, write_result
 
 
-SUPPORTED_VIEWS = ("front", "left", "back")
+SUPPORTED_VIEWS = ("front", "left", "back", "right")
 
 
 def run(request: dict) -> dict:
@@ -32,8 +32,8 @@ def run(request: dict) -> dict:
             selected[view] = str(path)
     if not selected:
         return {"ok": False, "category": "INPUT_MISSING", "error": "Hunyuan requires a processed FRONT image"}
-    # The released Hunyuan2mv API documents front/left/back. Do not silently
-    # pretend that RIGHT was consumed; report it to the orchestration layer.
+    # The official MVImageProcessorV2 accepts all four canonical view tags.
+    # Keep any unknown keys explicit instead of silently treating them as views.
     ignored_views = sorted(set(images) - set(selected))
     output_dir = Path(str(request.get("output_dir", ""))).expanduser().resolve()
     if not str(output_dir):

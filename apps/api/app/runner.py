@@ -244,7 +244,7 @@ class PipelineRunner:
             manifest.actual_provider = result.payload.get("provider", "HunyuanMultiviewProvider")
             ignored = result.payload.get("ignored_views", [])
             if ignored:
-                manifest.warnings.append("Hunyuan3D-2mv currently consumes FRONT/LEFT/BACK; RIGHT was retained but not passed to this provider")
+                manifest.warnings.append(f"Hunyuan3D-2mv did not consume these supplied views: {', '.join(ignored)}")
             if len(processed) == 1:
                 warning = "Один ракурс: скрытая сторона и материалы приблизительны; для качества уровня Tripo добавьте LEFT, BACK и RIGHT."
                 manifest.warnings = [item for item in manifest.warnings if not item.startswith("Один ракурс:")]
