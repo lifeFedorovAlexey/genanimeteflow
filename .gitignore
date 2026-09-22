@@ -17,6 +17,7 @@ jobs/*/previews/
 jobs/*/motions/
 jobs/*/export/
 jobs/*/rig/
+jobs/*/equipment/
 assets/equipment/*
 motions/installed/
 .vite-cache/

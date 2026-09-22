@@ -87,6 +87,22 @@ def run(request: dict) -> dict:
             mesh.location = (0.0, 0.0, 0.0)
             mesh.rotation_mode = "XYZ"
             mesh.rotation_euler = (0.0, 0.0, 0.0)
+            bpy.context.view_layer.update()
+            world_matrix = mesh.matrix_world.copy()
+            # Keep the socket as metadata and preserve its evaluated world
+            # transform, but use an explicit armature modifier for the actual
+            # exported deformation. This avoids glTF interpreting a parent
+            # chain without skin attributes as a malformed skinned primitive.
+            mesh.parent = None
+            mesh.matrix_world = world_matrix
+            # Blender's glTF exporter treats meshes under a bone-parented
+            # hierarchy as skinned.  Give a rigid prop an explicit one-bone
+            # skin so the exported JOINTS_0/WEIGHTS_0 are valid and the prop
+            # follows the socket during animation.
+            group = mesh.vertex_groups.get(bone_name) or mesh.vertex_groups.new(name=bone_name)
+            group.add(list(range(len(mesh.data.vertices))), 1.0, "REPLACE")
+            modifier = mesh.modifiers.new(name="CharacterFactoryRigidSocket", type="ARMATURE")
+            modifier.object = target
         attached.append({"id": str(asset["id"]), "socket": socket_id, "bone": bone_name})
         sockets.append({"id": socket_id, "object": socket_name, "parentBone": bone_name, "position": list(position), "rotation": list(rotation), "scale": list(scale)})
     bpy.ops.object.select_all(action="SELECT")

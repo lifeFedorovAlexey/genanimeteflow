@@ -80,6 +80,11 @@ def set_equipment_selection(job_id: str, request: EquipmentSelectionRequest) -> 
     except EquipmentLibraryError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     manifest.equipment_assets = request.assets
+    store.invalidate_from(manifest, StageName.EQUIPMENT)
+    if manifest.stages[StageName.EQUIPMENT.value].status is StageStatus.READY:
+        manifest.stages[StageName.EQUIPMENT.value].status = StageStatus.INVALIDATED
+    manifest.stages[StageName.EQUIPMENT.value].error_category = "UPSTREAM_CHANGED"
+    manifest.stages[StageName.EQUIPMENT.value].error_message = "Equipment selection changed; attach the selected assets"
     store.save(manifest)
     return manifest
 
