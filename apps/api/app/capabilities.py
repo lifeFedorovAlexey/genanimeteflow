@@ -31,6 +31,7 @@ def capabilities() -> dict:
             "rig": {"available": unirig["installed"], "reason": None if unirig["installed"] else unirig["reason"] or "UniRig runtime is not ready"},
             "motions": {"available": bool(blender and motion_clips), "description": "Blender canonical-bone retarget and bake" if blender and motion_clips else None, "reason": None if blender and motion_clips else "Install and register at least one validated motion library" if blender else "Blender is not installed"},
             "equipment": {"available": bool(blender and equipment_assets), "description": "Blender socket attachment for registered rigid equipment" if blender and equipment_assets else None, "reason": None if blender and equipment_assets else "Register at least one validated equipment asset" if blender else "Blender is not installed"},
+            "ik": {"available": bool(blender), "description": "Blender foot, look and two-hand IK constraint setup" if blender else None, "reason": None if blender else "Blender is not installed"},
             "export": {"available": bool(blender), "description": "Blender GLB/FBX export with round-trip validation" if blender else None, "reason": None if blender else "Blender is not installed"},
         },
         "models": models,

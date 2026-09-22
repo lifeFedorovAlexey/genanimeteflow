@@ -24,6 +24,7 @@ class StageName(str, Enum):
     RETOPOLOGY = "retopology"
     RIG = "rig"
     EQUIPMENT = "equipment"
+    IK = "ik"
     MOTIONS = "motions"
     EXPORT = "export"
 

@@ -15,6 +15,7 @@ def build_unit_manifest(job: JobManifest, job_dir: Path, glb_path: Path, fbx_pat
     rig = job.stages.get("rig")
     motions = job.stages.get("motions")
     equipment = job.stages.get("equipment")
+    ik = job.stages.get("ik")
     equipment_result = equipment.result if equipment else {}
     exported_glb = roundtrip.get("glb", {}) if isinstance(roundtrip, dict) else {}
     exported_rig = roundtrip.get("rig", {}) if isinstance(roundtrip, dict) else {}
@@ -47,7 +48,11 @@ def build_unit_manifest(job: JobManifest, job_dir: Path, glb_path: Path, fbx_pat
         "motion_sources": motion_sources,
         "equipment": equipment_result.get("assets", []),
         "sockets": equipment_result.get("sockets", []),
-        "ik_settings": {},
+        "ik_settings": {
+            **(ik.result.get("settings", {}) if ik else {}),
+            "targets": ik.result.get("targets", []) if ik else [],
+            "constraints": ik.result.get("constraints", []) if ik else [],
+        },
         "validation": {"glb_roundtrip": roundtrip, "final_stage": validation},
         "pipeline_version": job.pipeline_version,
         "stage_durations": {name: stage.duration_seconds for name, stage in job.stages.items()},

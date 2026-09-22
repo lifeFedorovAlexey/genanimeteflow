@@ -6,7 +6,7 @@ const views: Array<{ id: ViewName; label: string; required: boolean }> = [
   { id: "front", label: "FRONT", required: true }, { id: "left", label: "LEFT", required: false }, { id: "back", label: "BACK", required: false }, { id: "right", label: "RIGHT", required: false },
 ];
 
-const stageOrder = ["references", "geometry", "textures", "retopology", "rig", "equipment", "motions", "export"];
+const stageOrder = ["references", "geometry", "textures", "retopology", "rig", "equipment", "ik", "motions", "export"];
 const stageMeta: Record<string, { label: string; action: string; icon: string }> = {
   references: { label: "Reference images", action: "Process images", icon: "01" },
   geometry: { label: "3D shape", action: "Generate shape", icon: "02" },
@@ -14,8 +14,9 @@ const stageMeta: Record<string, { label: string; action: string; icon: string }>
   retopology: { label: "Game topology", action: "Optimize mesh", icon: "04" },
   rig: { label: "Skeleton", action: "Build skeleton", icon: "05" },
   equipment: { label: "Optional equipment", action: "Attach equipment", icon: "06" },
-  motions: { label: "Animations", action: "Normalize motions", icon: "07" },
-  export: { label: "Export unit", action: "Export unit", icon: "08" },
+  ik: { label: "IK setup", action: "Prepare IK targets", icon: "07" },
+  motions: { label: "Animations", action: "Normalize motions", icon: "08" },
+  export: { label: "Export unit", action: "Export unit", icon: "09" },
 };
 
 function statusLabel(status?: string): string {
@@ -39,6 +40,7 @@ function canRunStage(job: Job, stage: string, capabilities?: Capabilities): bool
   if (stage === "retopology") return job.stages.textures?.status === "READY";
   if (stage === "rig") return job.stages.retopology?.status === "READY";
   if (stage === "equipment") return job.stages.rig?.status === "READY" && job.equipment_assets.length > 0;
+  if (stage === "ik") return job.stages.rig?.status === "READY";
   if (stage === "motions") return job.stages.rig?.status === "READY" && job.motion_clips.length > 0;
   if (stage === "export") return job.stages.motions?.status === "READY" && job.export_actions.length > 0;
   return false;
@@ -55,6 +57,7 @@ function blockedReason(job: Job, stage: string, capabilities?: Capabilities): st
   if (stage === "rig" && job.stages.retopology?.status !== "READY") return "Optimize the mesh first";
   if (stage === "equipment" && job.equipment_assets.length === 0) return "Optional: register equipment if this character needs it";
   if (stage === "equipment" && job.stages.rig?.status !== "READY") return "Build the skeleton first";
+  if (stage === "ik" && job.stages.rig?.status !== "READY") return "Build the skeleton first";
   if (stage === "motions" && job.motion_clips.length === 0) return "Choose motion clips in the motion library first";
   if (stage === "motions" && job.stages.rig?.status !== "READY") return "Build the skeleton first";
   if (stage === "export" && job.export_actions.length === 0) return "Choose at least one animation to export";

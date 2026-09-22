@@ -93,7 +93,7 @@ class PipelineRunner:
         started = record.started_at
         try:
             logger.info("Stage started: %s", stage.value)
-            heavy_stages = {StageName.GEOMETRY, StageName.RETOPOLOGY, StageName.RIG, StageName.EQUIPMENT, StageName.MOTIONS, StageName.EXPORT}
+            heavy_stages = {StageName.GEOMETRY, StageName.RETOPOLOGY, StageName.RIG, StageName.EQUIPMENT, StageName.IK, StageName.MOTIONS, StageName.EXPORT}
             if stage in heavy_stages:
                 await self.queue.run(lambda: self._execute_stage(manifest, stage, logger, log_path))
             else:
@@ -137,6 +137,8 @@ class PipelineRunner:
             await self._rig(manifest, logger, log_path)
         elif stage is StageName.EQUIPMENT:
             await self._equipment(manifest, logger, log_path)
+        elif stage is StageName.IK:
+            await self._ik(manifest, logger, log_path)
         elif stage is StageName.MOTIONS:
             await self._motions(manifest, logger, log_path)
         elif stage is StageName.EXPORT:
@@ -400,7 +402,9 @@ class PipelineRunner:
         job_dir = self.store.job_dir(manifest.job_id)
         equipment = manifest.stages[StageName.EQUIPMENT.value]
         equipment_mesh = equipment.result.get("mesh_path") if equipment.status is StageStatus.READY else None
-        source_mesh = job_dir / (equipment_mesh if isinstance(equipment_mesh, str) else mesh_value)
+        ik = manifest.stages[StageName.IK.value]
+        ik_mesh = ik.result.get("mesh_path") if ik.status is StageStatus.READY else None
+        source_mesh = job_dir / (ik_mesh if isinstance(ik_mesh, str) else equipment_mesh if isinstance(equipment_mesh, str) else mesh_value)
         motions = manifest.stages[StageName.MOTIONS.value]
         normalized_by_action = {str(item.get("worker", {}).get("normalized_action")): str(item["mesh_path"]) for item in motions.result.get("clips", []) if item.get("mesh_path")}
         missing_actions = [action for action in manifest.export_actions if action not in normalized_by_action]
@@ -419,6 +423,29 @@ class PipelineRunner:
         manifest_path = save_unit_manifest(manifest, job_dir, glb_path, fbx_path, {**roundtrip, "glb": glb_report.__dict__, "rig": rig_report.__dict__})
         manifest.stages[StageName.EXPORT.value].result = {"glb_path": str(glb_path.relative_to(job_dir)), "fbx_path": str(fbx_path.relative_to(job_dir)), "manifest_path": str(manifest_path.relative_to(job_dir)), "selected_actions": manifest.export_actions, "roundtrip": {**roundtrip, "glb": glb_report.__dict__, "rig": rig_report.__dict__}}
         logger.info("Export completed: %s", glb_path)
+
+    async def _ik(self, manifest: JobManifest, logger: logging.Logger, log_path: Path) -> None:
+        rig = manifest.stages[StageName.RIG.value]
+        rig_value = rig.result.get("mesh_path")
+        if rig.status is not StageStatus.READY or not isinstance(rig_value, str):
+            raise RuntimeError("Rig must be READY before IK setup")
+        blender = blender_path()
+        if not blender:
+            raise WorkerFailure("BLENDER_MISSING", "Blender executable was not found")
+        job_dir = self.store.job_dir(manifest.job_id)
+        equipment = manifest.stages[StageName.EQUIPMENT.value]
+        equipment_value = equipment.result.get("mesh_path") if equipment.status is StageStatus.READY else None
+        source_mesh = job_dir / (equipment_value if isinstance(equipment_value, str) else rig_value)
+        output_mesh = job_dir / "ik" / "ik_setup.glb"
+        request = {"source_mesh": str(source_mesh), "output_mesh": str(output_mesh), "foot_ik": True, "look_ik": True, "two_hand_ik": any(bool(asset.get("secondary_grip")) for asset in equipment.result.get("assets", [])) if equipment.status is StageStatus.READY else False}
+        logger.info("Creating Blender IK targets and constraints: %s", request)
+        result = await asyncio.to_thread(self.process_manager.run_json_worker, [sys.executable, "-m", "workers.blender.ik_worker"], request, REPO_ROOT, {"BLENDER_PATH": blender}, log_path, process_key=f"{manifest.job_id}:{StageName.IK.value}")
+        report = validate_glb(output_mesh, require_skeleton=True)
+        rig_report = validate_rigged_glb(output_mesh, require_canonical=True)
+        if not report.valid or not rig_report.valid:
+            raise WorkerFailure("IK_OUTPUT_INVALID", "; ".join(report.errors + rig_report.errors))
+        manifest.stages[StageName.IK.value].result = {"mesh_path": str(output_mesh.relative_to(job_dir)), "source_mesh": str(source_mesh.relative_to(job_dir)), "settings": request, "targets": result.payload.get("targets", []), "constraints": result.payload.get("constraints", []), "worker": result.payload, "validation": {"glb": report.__dict__, "rig": rig_report.__dict__}}
+        logger.info("IK setup saved: %s", output_mesh)
 
     async def _equipment(self, manifest: JobManifest, logger: logging.Logger, log_path: Path) -> None:
         if not manifest.equipment_assets:

@@ -37,7 +37,7 @@ class JobStore:
             stages=stages,
         )
         path = self.job_dir(job_id)
-        for name in ("references/original", "references/processed", "geometry", "textures", "retopology", "rig", "motions", "clothing", "equipment", "export", "logs"):
+        for name in ("references/original", "references/processed", "geometry", "textures", "retopology", "rig", "motions", "clothing", "equipment", "ik", "export", "logs"):
             (path / name).mkdir(parents=True, exist_ok=True)
         self.save(manifest)
         return manifest
