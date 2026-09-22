@@ -25,6 +25,7 @@ Each checked item must have working code, automated coverage where practical, a 
 
 - [x] Implement SPAR3D provider subprocess protocol and generated-mesh persistence (runtime requires official checkout and weights)
 - [x] Pin and install a real local single-image geometry worker; expose model download/integrity checks
+- [x] Add and smoke-test the official Hunyuan3D-2mv multiview worker with real distinct reference views
 - [x] Implement real textured output and full PBR material validation (embedded extraction is implemented)
 - [x] Implement Blender retopology worker with GLB validation (UV-preserving quad mode remains gated)
 - [x] Implement UniRig worker bridge, official skeleton/skin inference and skin-weight validation (runtime requires official checkout, checkpoint and WSL CUDA)

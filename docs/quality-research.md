@@ -127,6 +127,18 @@ and attack states against those real actions. This is the first complete local
 animation/export proof; it is not yet a claim that the deformations visually
 match Mixamo on every body shape.
 
+## Multiview geometry smoke run
+
+On 2026-09-22 the official Hunyuan3D-2mv worker was run on three distinct
+upstream sample images (`front`, `left`, `back`) with the production BALANCED
+settings (`50` steps, octree `384`, `num_chunks=20000`, low-VRAM mode). The
+worker completed on the RTX 4070 in `95.7 s`, returned
+`HunyuanMultiviewProvider`, and reported `ignored_views=[]`. The generated
+GLB passed the repository validator with `325,447` vertices and `650,884`
+faces. It is a geometry-only provider smoke proof: it has no UVs, materials,
+rig or animation until the normal downstream stages run. It does not replace
+the required acceptance run with the user's four real reference images.
+
 Pixal3D's seven single-view checkpoint files total about 24.05 GB decimal,
 excluding auxiliary models, dependencies and build space. Whole-repository weight
 downloads would also fetch separate multiview checkpoints. Enumerate selected
