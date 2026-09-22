@@ -146,6 +146,18 @@
 .viewport { height: min(68vh, 660px); min-height: 480px; }
 .results-panel { min-height: calc(100vh - 72px); }
 
+/* The workbench has one creation action in the top bar. Do not repeat it in
+   the canvas as a second title block; the reference panel is the obvious
+   starting point once a unit is selected. */
+.content-title { display: none; }
+.references { grid-row: 1; }
+.hardware { grid-row: 2; }
+.quality-panel { grid-row: 3; }
+.stages { grid-row: 4; }
+.tester-layout { grid-row: 1 / span 4; }
+.results-panel .panel-note { display: none; }
+.motion-grid { max-height: none; overflow: visible; }
+
 @media (max-width: 1180px) {
   .workspace { grid-template-columns: minmax(0, 1fr); padding-left: 84px; }
   .results-panel { min-height: 0; border-left: 0; border-top: 1px solid #272d36; }

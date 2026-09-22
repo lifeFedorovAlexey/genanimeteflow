@@ -22,19 +22,16 @@ def _allow_official_local_pipeline_code() -> None:
 
 
 def _prepare_paint_image(image):
-    """Give Hunyuan Paint an opaque RGB reference, never a cutout alpha mask.
+    """Keep the cutout in the format expected by Tencent's official pipeline.
 
-    The reference preprocessor intentionally writes transparent PNGs for shape
-    reconstruction. Paint interprets those transparent pixels as image input,
-    which can turn the cutout boundary into white blocks and dark speckles.
-    Compositing over the reference's neutral white background keeps that alpha
-    representation local to geometry generation and gives Paint a real image.
+    Hunyuan Paint's own ``recenter_image`` crops RGBA references and restores
+    a controlled border before its delight and multiview stages. Converting
+    these images to opaque RGB here bypassed that alignment step and made the
+    diffusion model treat the unused canvas as character pixels.
     """
     from PIL import Image
 
-    rgba = image.convert("RGBA")
-    background = Image.new("RGBA", rgba.size, (255, 255, 255, 255))
-    return Image.alpha_composite(background, rgba).convert("RGB")
+    return image.convert("RGBA")
 
 
 def _configure_texture_resolution(pipeline, resolution: int):
@@ -75,15 +72,22 @@ def run(request: dict) -> dict:
     # its similarly named offload helper expects a ``components`` mapping that
     # does not exist. Device placement is handled by the official pipeline.
     started = time.perf_counter()
-    with Image.open(request["image"]) as source_image:
-        paint_image = _prepare_paint_image(source_image)
-    textured = pipeline(loaded, image=paint_image)
+    image_paths = request.get("images") or [request["image"]]
+    paint_images = []
+    for image_path in image_paths:
+        with Image.open(image_path) as source_image:
+            paint_images.append(_prepare_paint_image(source_image))
+    # Tencent's official Paint pipeline accepts a list of reference views. It
+    # renders its own normal/position cameras, synthesizes missing views, then
+    # bakes them with weighted seam-aware blending. Passing only FRONT here was
+    # the reason four-view jobs still produced stretched, dirty atlases.
+    textured = pipeline(loaded, image=paint_images)
     output_path = Path(request["output_mesh"])
     output_path.parent.mkdir(parents=True, exist_ok=True)
     textured.export(output_path)
     if hasattr(torch.cuda, "empty_cache"):
         torch.cuda.empty_cache()
-    return {"ok": True, "mesh_path": str(output_path), "duration_seconds": time.perf_counter() - started, "settings": request}
+    return {"ok": True, "mesh_path": str(output_path), "duration_seconds": time.perf_counter() - started, "input_view_count": len(paint_images), "multiview_bake": len(paint_images) > 1, "settings": request}
 
 
 if __name__ == "__main__":
