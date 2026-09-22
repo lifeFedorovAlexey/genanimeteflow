@@ -22,6 +22,7 @@ from tools.validation.glb import extract_glb_images, validate_glb
 from .export_manifest import save_unit_manifest
 from .vram_monitor import VramMonitor
 from .reference_pipeline import assess_reference, preprocess_reference
+from .view_quality import dinov3_runtime
 from .schemas import JobManifest, StageName, StageStatus
 from tools.validation.rig import validate_rigged_glb
 
@@ -94,7 +95,7 @@ class PipelineRunner:
         started = record.started_at
         try:
             logger.info("Stage started: %s", stage.value)
-            heavy_stages = {StageName.GEOMETRY, StageName.RETOPOLOGY, StageName.RIG, StageName.CLOTHING, StageName.EQUIPMENT, StageName.IK, StageName.MOTIONS, StageName.EXPORT}
+            heavy_stages = {StageName.REFERENCES, StageName.GEOMETRY, StageName.RETOPOLOGY, StageName.RIG, StageName.CLOTHING, StageName.EQUIPMENT, StageName.IK, StageName.MOTIONS, StageName.EXPORT}
             if stage in heavy_stages:
                 await self.queue.run(lambda: self._execute_stage(manifest, stage, logger, log_path))
             else:
@@ -180,6 +181,43 @@ class PipelineRunner:
             if quality["level"] == "ERROR":
                 raise ValueError(f"Invalid {view} reference: {'; '.join(quality['errors'])}")
             logger.info("Saved processed reference: %s", destination)
+        manifest.warnings = [item for item in manifest.warnings if not item.startswith("Ракурсы DINOv3:")]
+        processed = {
+            slot.view: str(job_dir / slot.processed_path)
+            for slot in manifest.references.values()
+            if slot.processed_path
+        }
+        runtime = dinov3_runtime()
+        if len(processed) >= 2 and runtime.get("available"):
+            try:
+                result = await asyncio.to_thread(
+                    self.process_manager.run_json_worker,
+                    [str(runtime["python"]), "-m", "workers.dinov3.worker"],
+                    {"images": processed, "model_path": str(runtime["model_path"])},
+                    REPO_ROOT,
+                    {"PYTHONPATH": str(REPO_ROOT)},
+                    job_dir / "logs" / "dinov3.log",
+                    timeout_seconds=900,
+                    process_key=f"{manifest.job_id}:{StageName.REFERENCES.value}",
+                )
+            except WorkerFailure as error:
+                logger.warning("DINOv3 view check was unavailable: %s", error)
+                manifest.warnings.append(f"Ракурсы DINOv3: проверка недоступна — {error}")
+            else:
+                report = result.payload
+                manifest.stages[StageName.REFERENCES.value].result["view_consistency"] = report
+                if report.get("level") == "WARNING":
+                    manifest.warnings.append(
+                        "Ракурсы DINOv3: изображения заметно различаются по признакам; проверьте позу, масштаб и фон перед генерацией."
+                    )
+                logger.info(
+                    "DINOv3 view consistency: level=%s mean=%.5f min=%.5f",
+                    report.get("level", "UNKNOWN"),
+                    float(report.get("mean_cosine", 0.0)),
+                    float(report.get("min_cosine", 0.0)),
+                )
+        elif len(processed) >= 2:
+            logger.info("DINOv3 view check skipped: %s", runtime.get("reason", "runtime unavailable"))
 
     async def _geometry(self, manifest: JobManifest, logger: logging.Logger, log_path: Path) -> None:
         reference_stage = manifest.stages[StageName.REFERENCES.value]

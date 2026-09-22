@@ -5,6 +5,7 @@ from .blender_discovery import blender_path
 from .model_registry import ModelRegistry
 from .motion_library import MotionLibrary
 from .equipment_library import EquipmentLibrary
+from .view_quality import dinov3_runtime
 
 
 def capabilities() -> dict:
@@ -18,12 +19,19 @@ def capabilities() -> dict:
     equipment_assets = EquipmentLibrary().catalog().get("assets", [])
     clothing_assets = [item for item in equipment_assets if item.get("asset_type") in {"CLOTHING_SKINNED", "ARMOR_SKINNED", "ACCESSORY_SKINNED"}]
     rigid_assets = [item for item in equipment_assets if item.get("asset_type") not in {"CLOTHING_SKINNED", "ARMOR_SKINNED", "ACCESSORY_SKINNED"}]
+    view_quality = dinov3_runtime()
     return {
         "providers": {
             "AUTO": {"available": spar3d["installed"] or hunyuan["installed"] or hunyuan_single["installed"], "reason": None if spar3d["installed"] or hunyuan["installed"] or hunyuan_single["installed"] else f"SPAR3D: {spar3d['reason']}; Hunyuan3D-2mv: {hunyuan['reason']}; Hunyuan3D-2: {hunyuan_single['reason']}"},
             "HunyuanMultiviewProvider": {"available": hunyuan["installed"], "reason": None if hunyuan["installed"] else hunyuan["reason"]},
             "HunyuanSingleViewProvider": {"available": hunyuan_single["installed"], "reason": None if hunyuan_single["installed"] else hunyuan_single["reason"]},
             "Spar3DProvider": {"available": spar3d["installed"], "reason": None if spar3d["installed"] else spar3d["reason"]},
+        },
+        "reference_quality": {
+            "provider": "DINOv3",
+            "available": view_quality["available"],
+            "reason": view_quality.get("reason"),
+            "model_id": view_quality["model_id"],
         },
         "stages": {
             "references": {"available": True, "description": "Validate, crop, alpha-process, normalize and persist reference images"},

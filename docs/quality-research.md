@@ -20,11 +20,16 @@ offload may make it possible, but this is an explicit hardware experiment, not a
 guaranteed 12 GB mode. **Hunyuan3D-Omni** is a shape/control model (including pose
 control), not a replacement for texturing, rigging or animation.
 
-The Pixal3D candidate remains useful as a quality comparator. Meta has granted
-the user's official DINOv3 gating request; a local token check now returns the
-user account and HTTP 200 for the gated model page. The DINOv3 weights are still
-not downloaded because Pixal3D is a comparator, not the primary production path.
-Do not silently substitute an unofficial mirror for a gated official checkpoint.
+The Pixal3D candidate remains useful as a quality comparator. Meta granted the
+user's official DINOv3 gating request, and the official
+`facebook/dinov3-vitl16-pretrain-lvd1689m` snapshot is now cached locally
+(1,212,584,680 bytes, revision `ea8dc2863c51be0a264bab82070e3e8836b02d51`).
+Character Factory uses that checkpoint only for an optional local reference
+consistency check: it compares embeddings across supplied views and records a
+warning, never a geometry-quality verdict. The full Pixal3D weights remain
+uninstalled because they require roughly 24 GB plus a separate environment and
+the current D: volume has only about 0.55 GB free. Do not silently substitute
+an unofficial mirror for the gated official checkpoint.
 
 ## Actual machine
 
@@ -126,6 +131,18 @@ unit manifest were also created. The graph endpoint selected idle, walk, jump
 and attack states against those real actions. This is the first complete local
 animation/export proof; it is not yet a claim that the deformations visually
 match Mixamo on every body shape.
+
+## Full graph and export acceptance
+
+The same local rigged test unit was rerun with the seeded ten-clip canonical
+set (`Idle_Loop`, `Walk_Loop`, `Sprint_Loop`, `Crouch_Fwd_Loop`, jump start,
+jump air, jump land, melee hook, hit knockback and death). The persisted graph
+report was valid with no missing playable states, an `idle->walk` transition,
+one real attack action, one upper-body layer and `in_place` root-motion mode.
+The export was rebuilt and the acceptance verifier passed all checks: 118,139
+vertices, 4 embedded textures, 42 bones and 10 selected animations. This is a
+pipeline acceptance result; it does not claim that a generated mesh is
+visually equivalent to Mixamo deformation on every character.
 
 ## Multiview geometry smoke run
 

@@ -93,6 +93,10 @@ function nextStep(job: Job, capabilities?: Capabilities): { title: string; body:
   if (failed) return { title: `${stageMeta[failed.stage].label}: нужно внимание`, body: failed.record.error_message ?? "Откройте детали шага и запустите его ещё раз.", stage: failed.stage, action: "Повторить", tone: "blocked" };
   const running = stageOrder.find(stage => job.stages[stage]?.status === "RUNNING");
   if (running) return { title: `${stageMeta[running].label} выполняется`, body: "Результат появится здесь автоматически после завершения.", tone: "action" };
+  const graph = job.stages.motions?.result?.graph as { missing_states?: string[] } | undefined;
+  if (job.stages.motions?.status === "READY" && (graph?.missing_states?.length ?? 0) > 0) {
+    return { title: "Анимации: не хватает состояний", body: `Добавьте: ${graph?.missing_states?.join(", ")}.`, stage: "motions", action: "Повторить анимации", tone: "blocked" };
+  }
   if (job.stages.export?.status === "READY") {
     const viewCount = Object.values(job.references).filter(slot => slot.quality?.level !== "ERROR").length;
     const body = viewCount < 2

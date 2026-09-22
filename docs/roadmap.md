@@ -14,6 +14,7 @@ Each checked item must have working code, automated coverage where practical, a 
 - [x] Live hardware diagnostics and `hardware_profile.json`
 - [x] Single-GPU serialization boundary
 - [x] Reference upload, original preservation and real preprocessing
+- [x] Optional official DINOv3 multiview consistency check with persisted warnings (requires locally cached gated weights)
 - [x] Structured stage logs and SSE job events
 - [x] GLB mesh validation and embedded texture extraction
 - [x] Motion catalog registration with license metadata, SHA-256 and GLB clip inspection
@@ -34,7 +35,7 @@ Each checked item must have working code, automated coverage where practical, a 
 - [x] Connect installed motion clips to job selection, catalog validation and the motions stage
 - [x] Seed new units with a real canonical motion set from the installed licensed library (user can remove selections)
 - [x] Connect graph evaluation endpoint to normalized Blender actions and Unit Tester state changes (upper-body bone-mask playback and source-gated additive contract are implemented; full acceptance clips remain)
-- [ ] Implement retargeting and the canonical animation graph (canonical retarget worker is real and smoke-tested; full graph blending, locomotion transitions and acceptance clips remain)
+- [x] Implement retargeting and the canonical animation graph (real Blender retarget plus 10-clip acceptance: all canonical states, idle→walk transition, combat action, upper-body layer and root-motion mode)
 - [x] Implement equipment, clothing, sockets and IK validation (real acceptance run: Utility Vest + CC0 Lightning Rifle, one socket, four IK targets/constraints)
 - [x] Add validated local equipment manifest/catalog registration with license-independent provenance and socket/grip metadata
 - [x] Add Blender rigid-equipment socket attachment stage with output and skeleton validation (skinned clothing and IK remain separate stages)
