@@ -66,6 +66,16 @@ def run(request: dict) -> dict:
         meshes = [obj for obj in imported if obj.type == "MESH"]
         if not meshes:
             raise RuntimeError(f"Equipment asset contains no mesh: {asset['id']}")
+        # A weapon can be authored with its own animation/skeleton. It is a
+        # rigid character attachment here, so keeping that second armature
+        # would make the exported unit ambiguous and break downstream IK.
+        source_armatures = [obj for obj in imported if obj.type == "ARMATURE"]
+        for source_armature in source_armatures:
+            for mesh in meshes:
+                for modifier in list(mesh.modifiers):
+                    if modifier.type == "ARMATURE" and modifier.object is source_armature:
+                        mesh.modifiers.remove(modifier)
+            bpy.data.objects.remove(source_armature, do_unlink=True)
         socket_id = str(asset.get("primary_socket") or asset.get("slot") or "hand_r")
         bone_name = _resolve_bone(target, socket_id)
         socket_name = f"socket_{asset['id']}_{socket_id}"

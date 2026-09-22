@@ -441,7 +441,8 @@ class PipelineRunner:
         equipment_value = equipment.result.get("mesh_path") if equipment.status is StageStatus.READY else None
         source_mesh = job_dir / (equipment_value if isinstance(equipment_value, str) else rig_value)
         output_mesh = job_dir / "ik" / "ik_setup.glb"
-        request = {"source_mesh": str(source_mesh), "output_mesh": str(output_mesh), "foot_ik": True, "look_ik": True, "two_hand_ik": any(bool(asset.get("secondary_grip")) for asset in equipment.result.get("assets", [])) if equipment.status is StageStatus.READY else False}
+        secondary_grips = [asset.get("secondary_grip") for asset in equipment.result.get("assets", []) if asset.get("secondary_grip")] if equipment.status is StageStatus.READY else []
+        request = {"source_mesh": str(source_mesh), "output_mesh": str(output_mesh), "foot_ik": True, "look_ik": True, "two_hand_ik": bool(secondary_grips), "secondary_grip": secondary_grips[0] if secondary_grips else None}
         logger.info("Creating Blender IK targets and constraints: %s", request)
         result = await asyncio.to_thread(self.process_manager.run_json_worker, [sys.executable, "-m", "workers.blender.ik_worker"], request, REPO_ROOT, {"BLENDER_PATH": blender}, log_path, process_key=f"{manifest.job_id}:{StageName.IK.value}")
         report = validate_glb(output_mesh, require_skeleton=True)

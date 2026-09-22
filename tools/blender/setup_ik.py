@@ -80,12 +80,15 @@ def run(request: dict) -> dict:
         constraints.append({"type": "DAMPED_TRACK", "name": constraint.name, "bone": head, "target": target.name, "max_angle_degrees": 70.0})
     if request.get("two_hand_ik"):
         hand = _bone(armature, "hand_l")
-        target = _target("ik_target_hand_l", _world_head(armature, hand))
+        grip = request.get("secondary_grip") or {}
+        position = grip.get("position") if isinstance(grip, dict) else None
+        target_position = _world_head(armature, hand) if not isinstance(position, (list, tuple)) or len(position) != 3 else Vector((float(position[0]), float(position[1]), float(position[2])))
+        target = _target("ik_target_hand_l", target_position)
         constraint = armature.pose.bones[hand].constraints.new("IK")
         constraint.name = "CharacterFactoryTwoHandIK"
         constraint.target = target
         constraint.chain_count = 2
-        targets.append({"id": "hand_l", "object": target.name, "bone": hand, "position": list(target.location)})
+        targets.append({"id": "hand_l", "object": target.name, "bone": hand, "position": list(target.location), "source": "secondary_grip"})
         constraints.append({"type": "IK", "name": constraint.name, "bone": hand, "chain_count": 2, "target": target.name})
     armature["character_factory_ik"] = json.dumps({"targets": targets, "constraints": constraints})
     bpy.context.view_layer.update()
