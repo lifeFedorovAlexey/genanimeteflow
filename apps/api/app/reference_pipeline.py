@@ -9,6 +9,7 @@ from PIL import Image, ImageChops
 
 
 SUPPORTED_VIEWS = ("front", "left", "back", "right")
+SAFE_FRAME_MARGIN = 0.08
 
 
 def _foreground_mask(image: Image.Image) -> Image.Image:
@@ -46,7 +47,12 @@ def preprocess_reference(source: Path, destination: Path, resolution: int) -> di
             raise ValueError("reference has no detectable foreground")
         cropped = image.crop(bbox)
         cropped.putalpha(mask.crop(bbox))
-        canvas_size = max(cropped.width, cropped.height)
+        # Keep a consistent safety frame around the silhouette. The previous
+        # crop filled the square edge-to-edge, which made valid references
+        # trigger edge warnings and gave downstream projection no breathing
+        # room around the head and feet.
+        occupied_size = max(cropped.width, cropped.height)
+        canvas_size = math.ceil(occupied_size / (1 - 2 * SAFE_FRAME_MARGIN))
         canvas = Image.new("RGBA", (canvas_size, canvas_size), (0, 0, 0, 0))
         canvas.alpha_composite(cropped, ((canvas_size - cropped.width) // 2, (canvas_size - cropped.height) // 2))
         output = canvas.resize((resolution, resolution), Image.Resampling.LANCZOS)
