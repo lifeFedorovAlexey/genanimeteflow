@@ -8,24 +8,24 @@ const views: Array<{ id: ViewName; label: string; required: boolean }> = [
 
 const stageOrder = ["references", "geometry", "textures", "retopology", "rig", "clothing", "equipment", "ik", "motions", "export"];
 const stageMeta: Record<string, { label: string; action: string; icon: string }> = {
-  references: { label: "Reference images", action: "Process images", icon: "01" },
-  geometry: { label: "3D shape", action: "Generate shape", icon: "02" },
-  textures: { label: "Materials", action: "Extract materials", icon: "03" },
-  retopology: { label: "Game topology", action: "Optimize mesh", icon: "04" },
-  rig: { label: "Skeleton", action: "Build skeleton", icon: "05" },
-  clothing: { label: "Optional clothing", action: "Transfer clothing", icon: "06" },
-  equipment: { label: "Optional equipment", action: "Attach equipment", icon: "07" },
-  ik: { label: "IK setup", action: "Prepare IK targets", icon: "08" },
-  motions: { label: "Animations", action: "Normalize motions", icon: "09" },
-  export: { label: "Export unit", action: "Export unit", icon: "10" },
+  references: { label: "Изображения", action: "Обработать", icon: "01" },
+  geometry: { label: "3D‑форма", action: "Создать форму", icon: "02" },
+  textures: { label: "Материалы", action: "Нанести материалы", icon: "03" },
+  retopology: { label: "Игровая сетка", action: "Оптимизировать сетку", icon: "04" },
+  rig: { label: "Скелет", action: "Собрать скелет", icon: "05" },
+  clothing: { label: "Одежда", action: "Перенести одежду", icon: "06" },
+  equipment: { label: "Экипировка", action: "Подключить экипировку", icon: "07" },
+  ik: { label: "IK", action: "Подготовить IK", icon: "08" },
+  motions: { label: "Анимации", action: "Нормализовать движения", icon: "09" },
+  export: { label: "Экспорт", action: "Экспортировать юнит", icon: "10" },
 };
 
 function statusLabel(status?: string): string {
-  if (status === "READY") return "Ready";
-  if (status === "RUNNING") return "In progress";
-  if (status === "FAILED" || status === "FAILED_OOM") return "Needs attention";
-  if (status === "CANCELLED") return "Stopped";
-  return "Waiting";
+  if (status === "READY") return "Готово";
+  if (status === "RUNNING") return "В работе";
+  if (status === "FAILED" || status === "FAILED_OOM") return "Нужно внимание";
+  if (status === "CANCELLED") return "Остановлено";
+  return "Ожидает";
 }
 
 function optimisticRunning(job: Job, stage: string): Job {
@@ -50,33 +50,33 @@ function canRunStage(job: Job, stage: string, capabilities?: Capabilities): bool
 
 function blockedReason(job: Job, stage: string, capabilities?: Capabilities): string {
   const record = job.stages[stage];
-  if (stage === "equipment" && job.equipment_assets.length === 0) return "Optional: leave empty for a body-only character";
-  if (stage === "clothing" && job.clothing_assets.length === 0) return "Optional: add clothing only if this character needs it";
+  if (stage === "equipment" && job.equipment_assets.length === 0) return "Можно пропустить: оставьте пустым для персонажа без экипировки";
+  if (stage === "clothing" && job.clothing_assets.length === 0) return "Можно пропустить: добавьте одежду, если она нужна";
   if (record?.error_message) return record.error_message;
-  if (!capabilities?.stages[stage]?.available) return capabilities?.stages[stage]?.reason ?? "This tool is not available on this computer";
-  if (stage === "references" && !job.references.front) return "Add a FRONT image first";
-  if (stage === "geometry" && job.stages.references?.status !== "READY") return "Process the reference images first";
-  if (stage === "textures" && job.stages.geometry?.status !== "READY") return "Generate the 3D shape first";
-  if (stage === "retopology" && job.stages.textures?.status !== "READY") return "Extract materials first";
-  if (stage === "rig" && job.stages.retopology?.status !== "READY") return "Optimize the mesh first";
-  if (stage === "equipment" && job.equipment_assets.length === 0) return "Optional: register equipment if this character needs it";
-  if (stage === "clothing" && job.clothing_assets.length === 0) return "Optional: add clothing if this character needs it";
-  if (stage === "equipment" && job.stages.rig?.status !== "READY") return "Build the skeleton first";
-  if (stage === "ik" && job.stages.rig?.status !== "READY") return "Build the skeleton first";
-  if (stage === "motions" && job.motion_clips.length === 0) return "Choose motion clips in the motion library first";
-  if (stage === "motions" && job.stages.rig?.status !== "READY") return "Build the skeleton first";
-  if (stage === "export" && job.export_actions.length === 0) return "Choose at least one animation to export";
-  if (stage === "export" && job.stages.motions?.status !== "READY") return "Normalize motions first";
-  return "Waiting for the previous step";
+  if (!capabilities?.stages[stage]?.available) return capabilities?.stages[stage]?.reason ?? "Инструмент недоступен на этом компьютере";
+  if (stage === "references" && !job.references.front) return "Сначала добавьте изображение FRONT";
+  if (stage === "geometry" && job.stages.references?.status !== "READY") return "Сначала обработайте изображения";
+  if (stage === "textures" && job.stages.geometry?.status !== "READY") return "Сначала создайте 3D‑форму";
+  if (stage === "retopology" && job.stages.textures?.status !== "READY") return "Сначала нанесите материалы";
+  if (stage === "rig" && job.stages.retopology?.status !== "READY") return "Сначала оптимизируйте сетку";
+  if (stage === "equipment" && job.equipment_assets.length === 0) return "Можно пропустить: зарегистрируйте экипировку при необходимости";
+  if (stage === "clothing" && job.clothing_assets.length === 0) return "Можно пропустить: добавьте одежду при необходимости";
+  if (stage === "equipment" && job.stages.rig?.status !== "READY") return "Сначала соберите скелет";
+  if (stage === "ik" && job.stages.rig?.status !== "READY") return "Сначала соберите скелет";
+  if (stage === "motions" && job.motion_clips.length === 0) return "Сначала выберите движения в библиотеке";
+  if (stage === "motions" && job.stages.rig?.status !== "READY") return "Сначала соберите скелет";
+  if (stage === "export" && job.export_actions.length === 0) return "Выберите хотя бы одну анимацию для экспорта";
+  if (stage === "export" && job.stages.motions?.status !== "READY") return "Сначала нормализуйте движения";
+  return "Ожидает завершения предыдущего шага";
 }
 
 function nextStep(job: Job, capabilities?: Capabilities): { title: string; body: string; stage?: string; action?: string; tone: "action" | "blocked" | "done" } {
-  if (!job.references.front) return { title: "Add the character FRONT image", body: "Drop a full-body front view into the first slot to begin.", stage: "references", action: "Add FRONT image", tone: "action" };
+  if (!job.references.front) return { title: "Добавьте FRONT персонажа", body: "Перетащите изображение персонажа в полный рост в первый слот.", stage: "references", action: "Добавить FRONT", tone: "action" };
   const failed = stageOrder.map(stage => ({ stage, record: job.stages[stage] })).find(item => item.record?.status === "FAILED" || item.record?.status === "FAILED_OOM");
-  if (failed) return { title: `${stageMeta[failed.stage].label} needs attention`, body: failed.record.error_message ?? "Open the stage details and run it again.", stage: failed.stage, action: "Try again", tone: "blocked" };
+  if (failed) return { title: `${stageMeta[failed.stage].label}: нужно внимание`, body: failed.record.error_message ?? "Откройте детали шага и запустите его ещё раз.", stage: failed.stage, action: "Повторить", tone: "blocked" };
   const running = stageOrder.find(stage => job.stages[stage]?.status === "RUNNING");
-  if (running) return { title: `${stageMeta[running].label} is working`, body: "The result will appear here automatically when the worker finishes.", tone: "action" };
-  if (job.stages.export?.status === "READY") return { title: "Character unit is ready", body: "The validated GLB is available in the result gallery.", tone: "done" };
+  if (running) return { title: `${stageMeta[running].label} выполняется`, body: "Результат появится здесь автоматически после завершения.", tone: "action" };
+  if (job.stages.export?.status === "READY") return { title: "Юнит готов", body: "Проверенный GLB доступен в галерее результатов.", tone: "done" };
   const pending = stageOrder.find(stage => {
     const record = job.stages[stage];
     if (record?.status === "READY") return false;
@@ -86,9 +86,9 @@ function nextStep(job: Job, capabilities?: Capabilities): { title: string; body:
   });
   if (pending) {
     const canRun = canRunStage(job, pending, capabilities);
-    return { title: canRun ? stageMeta[pending].action : `Prepare ${stageMeta[pending].label.toLowerCase()}`, body: blockedReason(job, pending, capabilities), stage: canRun ? pending : undefined, action: canRun ? stageMeta[pending].action : undefined, tone: canRun ? "action" : "blocked" };
+    return { title: canRun ? stageMeta[pending].action : `Подготовьте: ${stageMeta[pending].label.toLowerCase()}`, body: blockedReason(job, pending, capabilities), stage: canRun ? pending : undefined, action: canRun ? stageMeta[pending].action : undefined, tone: canRun ? "action" : "blocked" };
   }
-  return { title: "Character unit is ready", body: "All available stages completed successfully.", tone: "done" };
+  return { title: "Юнит готов", body: "Все доступные шаги успешно завершены.", tone: "done" };
 }
 
 function App() {
