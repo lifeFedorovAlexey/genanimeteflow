@@ -90,3 +90,4 @@ class JobStore:
                 record.status = StageStatus.INVALIDATED
                 record.error_category = "UPSTREAM_CHANGED"
                 record.error_message = f"Invalidated because {stage.value} was rerun"
+                record.result = {}

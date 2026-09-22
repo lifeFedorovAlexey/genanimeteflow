@@ -93,6 +93,7 @@ def set_equipment_selection(job_id: str, request: EquipmentSelectionRequest) -> 
     store.invalidate_from(manifest, StageName.EQUIPMENT)
     if manifest.stages[StageName.EQUIPMENT.value].status is StageStatus.READY:
         manifest.stages[StageName.EQUIPMENT.value].status = StageStatus.INVALIDATED
+    manifest.stages[StageName.EQUIPMENT.value].result = {}
     manifest.stages[StageName.EQUIPMENT.value].error_category = "UPSTREAM_CHANGED"
     manifest.stages[StageName.EQUIPMENT.value].error_message = "Equipment selection changed; attach the selected assets"
     store.save(manifest)
@@ -112,6 +113,7 @@ def set_clothing_selection(job_id: str, request: ClothingSelectionRequest) -> Jo
     manifest.clothing_assets = request.assets
     store.invalidate_from(manifest, StageName.CLOTHING)
     manifest.stages[StageName.CLOTHING.value].status = StageStatus.INVALIDATED
+    manifest.stages[StageName.CLOTHING.value].result = {}
     manifest.stages[StageName.CLOTHING.value].error_category = "UPSTREAM_CHANGED"
     manifest.stages[StageName.CLOTHING.value].error_message = "Clothing selection changed; transfer weights onto the character rig"
     store.save(manifest)
@@ -134,6 +136,7 @@ def set_export_selection(job_id: str, request: ExportSelectionRequest) -> JobMan
         manifest.stages[StageName.EXPORT.value].status = StageStatus.INVALIDATED
         manifest.stages[StageName.EXPORT.value].error_category = "UPSTREAM_CHANGED"
         manifest.stages[StageName.EXPORT.value].error_message = "Export selection changed; export the selected actions"
+    manifest.stages[StageName.EXPORT.value].result = {}
     store.save(manifest)
     return manifest
 
@@ -149,6 +152,7 @@ def set_motion_selection(job_id: str, request: MotionSelectionRequest) -> JobMan
     store.invalidate_from(manifest, StageName.MOTIONS)
     if manifest.stages[StageName.MOTIONS.value].status is StageStatus.READY:
         manifest.stages[StageName.MOTIONS.value].status = StageStatus.INVALIDATED
+    manifest.stages[StageName.MOTIONS.value].result = {}
     manifest.stages[StageName.MOTIONS.value].error_category = "UPSTREAM_CHANGED"
     manifest.stages[StageName.MOTIONS.value].error_message = "Motion selection changed; normalize the selected clips"
     store.save(manifest)
@@ -233,6 +237,7 @@ async def upload_reference(job_id: str, view: str, file: UploadFile = File(...))
     reference_stage.status = StageStatus.INVALIDATED
     reference_stage.error_category = "UPSTREAM_CHANGED"
     reference_stage.error_message = f"The {view} reference changed; process references again"
+    reference_stage.result = {}
     manifest.status = "INVALIDATED"
     store.save(manifest)
     return manifest

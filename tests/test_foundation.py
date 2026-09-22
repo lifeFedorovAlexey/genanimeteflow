@@ -118,6 +118,7 @@ class FoundationTests(unittest.TestCase):
             store.invalidate_from(manifest, StageName.GEOMETRY)
             self.assertEqual(manifest.stages[StageName.GEOMETRY.value].status, StageStatus.READY)
             self.assertEqual(manifest.stages[StageName.RETOPOLOGY.value].status, StageStatus.INVALIDATED)
+            self.assertEqual(manifest.stages[StageName.RETOPOLOGY.value].result, {})
             self.assertEqual(downstream(StageName.GEOMETRY)[-1], StageName.EXPORT)
 
     def test_reference_preprocessing_preserves_foreground_and_reports_quality(self) -> None:
