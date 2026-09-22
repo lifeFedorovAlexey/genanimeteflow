@@ -125,11 +125,31 @@
 .slot-status .slot-check { font-size: 15px; line-height: 1; }
 .slot-status small { font-size: 9px; }
 
-/* The work sequence is intentionally vertical: one readable panel per step. */
-.content { display: flex; flex-direction: column; max-width: 1060px; }
-.dashboard-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
-.references, .hardware, .tester-layout, .quality-panel, .stages, .motion-library { width: 100%; }
-.tester-layout { grid-template-columns: minmax(0, 1fr); }
+/* Primary workspace: source controls, playable viewport, result gallery. */
+.workspace { grid-template-columns: minmax(0, 1fr) 320px; padding-left: 84px; }
+.content { display: grid; grid-template-columns: 370px minmax(0, 1fr); gap: 16px; align-items: start; max-width: none; padding: 18px 16px 40px; }
+.content-title { grid-column: 1 / -1; margin-bottom: 0; }
+.error-banner { grid-column: 1 / -1; }
+.next-card { display: none; }
+.dashboard-grid { display: contents; }
+.references { grid-column: 1; grid-row: 2; }
+.hardware { grid-column: 1; grid-row: 3; }
+.quality-panel { grid-column: 1; grid-row: 4; }
+.stages { grid-column: 1; grid-row: 5; max-height: none; overflow: visible; }
+.tester-layout { grid-column: 2; grid-row: 2 / span 4; grid-template-columns: minmax(0, 1fr); margin-top: 0; }
+.inspector { display: none; }
+.motion-library, .equipment-library { grid-column: 1 / -1; }
+.panel { padding: 16px; }
+.references .panel-note { display: none; }
+.reference-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.drop-slot { min-height: 170px; }
+.viewport { height: min(68vh, 660px); min-height: 480px; }
+.results-panel { min-height: calc(100vh - 72px); }
+
+@media (max-width: 1180px) {
+  .workspace { grid-template-columns: minmax(0, 1fr); padding-left: 84px; }
+  .results-panel { min-height: 0; border-left: 0; border-top: 1px solid #272d36; }
+}
 .acceptance-panel.attention { border-color: #67522e; }
 .acceptance-metrics { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; color: #79d9a6; font-size: 10px; }
 .acceptance-metrics span { padding: 5px 7px; border-radius: 4px; background: #173126; }
