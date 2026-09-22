@@ -167,6 +167,24 @@ faces. It is a geometry-only provider smoke proof: it has no UVs, materials,
 rig or animation until the normal downstream stages run. It does not replace
 the required acceptance run with the user's four real reference images.
 
+## Multiview textured downstream smoke
+
+The production API was then run on job `f9466667-8fb4-46a4-ab59-de26cbf0bf90`
+with the same distinct `front/left/back` references. Geometry completed as
+`HunyuanMultiviewProvider` with all three views consumed, peak VRAM `8.09 / 11.99
+GiB`, and a valid mesh of `323,794` vertices and `647,584` faces. Hunyuan Paint
+completed in `313.5 s` and produced a valid textured GLB with one embedded
+texture and UVs. Blender TRIANGLE retopology then produced `32,989` faces while
+preserving one material, one texture and UVs.
+
+The same smoke intentionally stopped at a real rig validation failure: the
+stylized non-T-pose reference produced a UniRig graph with no two arm roots for
+the canonical humanoid mapping. The job now reports `RIG_VALIDATION_FAILED`
+with the upstream `ValueError` in the UI/log instead of treating an empty GLB
+as success. This is evidence that downstream validation is active, not a full
+acceptance result; the final run still requires four consistent humanoid
+T-pose views.
+
 Pixal3D's seven single-view checkpoint files total about 24.05 GB decimal,
 excluding auxiliary models, dependencies and build space. Whole-repository weight
 downloads would also fetch separate multiview checkpoints. Enumerate selected
