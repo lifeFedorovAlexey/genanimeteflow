@@ -152,9 +152,13 @@ function App() {
 
   const refresh = useCallback(async () => {
     setJobsLoading(true);
-    const [hardwareResult, capabilitiesResult, jobsResult, motionsResult, equipmentResult, cacheResult] = await Promise.allSettled([api.hardware(), api.capabilities(), api.jobs(), api.motions(), api.equipment(), api.cache()]);
+    // Runtime discovery imports model environments and can take longer than
+    // normal API reads. Do not block the existing model/viewer on that probe.
+    void api.capabilities().then(setCapabilities).catch(reason => {
+      setError(`Проверка инструментов: ${reason instanceof Error ? reason.message : String(reason)}`);
+    });
+    const [hardwareResult, jobsResult, motionsResult, equipmentResult, cacheResult] = await Promise.allSettled([api.hardware(), api.jobs(), api.motions(), api.equipment(), api.cache()]);
     if (hardwareResult.status === "fulfilled") setHardware(hardwareResult.value);
-    if (capabilitiesResult.status === "fulfilled") setCapabilities(capabilitiesResult.value);
     if (jobsResult.status === "fulfilled") {
       setJobs(jobsResult.value);
       const mostComplete = [...jobsResult.value].sort((left, right) => jobMaturity(right) - jobMaturity(left))[0];
@@ -164,7 +168,7 @@ function App() {
     if (equipmentResult.status === "fulfilled") setEquipmentCatalog(equipmentResult.value);
     if (cacheResult.status === "fulfilled") setCacheItems(cacheResult.value.items);
     setJobsLoading(false);
-    const criticalFailure = [capabilitiesResult, jobsResult, cacheResult].find(result => result.status === "rejected");
+    const criticalFailure = [jobsResult, cacheResult].find(result => result.status === "rejected");
     if (criticalFailure?.status === "rejected") setError(criticalFailure.reason instanceof Error ? criticalFailure.reason.message : String(criticalFailure.reason));
     else setError("");
   }, []);

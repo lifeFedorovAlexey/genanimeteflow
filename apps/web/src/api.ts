@@ -15,16 +15,16 @@ export interface CacheItem { job_id: string; status: string; cache_bytes: number
 export interface AcceptanceReport { job_id: string; valid: boolean; checks: Array<{ id: string; label: string; passed: boolean; detail: string }>; metrics: { vertices: number; textures: number; bones: number; animations: number; selected_actions: number }; }
 const REQUEST_TIMEOUT_MS = 8000;
 
-async function request<T>(url: string, init?: RequestInit): Promise<T> {
+async function request<T>(url: string, init?: RequestInit, timeoutMs = REQUEST_TIMEOUT_MS): Promise<T> {
   const controller = new AbortController();
-  const timeoutId = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(url, { ...init, signal: controller.signal });
     if (!response.ok) throw new Error((await response.json().catch(() => null))?.detail ?? `${response.status} ${response.statusText}`);
     return response.json() as Promise<T>;
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
-      throw new Error("Локальный API не ответил за 8 секунд. Проверьте состояние сервера и повторите загрузку.");
+      throw new Error(`Локальный API не ответил за ${timeoutMs / 1000} секунд. Проверьте состояние сервера и повторите загрузку.`);
     }
     throw error;
   } finally {
@@ -32,7 +32,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   }
 }
 export const api = {
-  hardware: () => request<Hardware>("/api/hardware"), capabilities: () => request<Capabilities>("/api/capabilities"), jobs: () => request<Job[]>("/api/jobs"), motions: () => request<MotionCatalog>("/api/motions"), equipment: () => request<EquipmentCatalog>("/api/equipment"), cache: () => request<{ items: CacheItem[] }>("/api/cache"), cleanCache: (jobIds: string[]) => request<{ cleaned: Array<{ job_id: string; deleted_bytes: number }>; skipped: Array<{ job_id: string; reason: string }>; deleted_bytes: number }>("/api/cache/clean", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ job_ids: jobIds }) }),
+  hardware: () => request<Hardware>("/api/hardware"), capabilities: () => request<Capabilities>("/api/capabilities", undefined, 45000), jobs: () => request<Job[]>("/api/jobs"), motions: () => request<MotionCatalog>("/api/motions"), equipment: () => request<EquipmentCatalog>("/api/equipment"), cache: () => request<{ items: CacheItem[] }>("/api/cache"), cleanCache: (jobIds: string[]) => request<{ cleaned: Array<{ job_id: string; deleted_bytes: number }>; skipped: Array<{ job_id: string; reason: string }>; deleted_bytes: number }>("/api/cache/clean", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ job_ids: jobIds }) }),
   createJob: (body: { name: string; profile: string; resolution: number; requested_provider: string }) => request<Job>("/api/jobs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   upload: (jobId: string, view: ViewName, file: File) => { const form = new FormData(); form.append("file", file); return request<Job>(`/api/jobs/${jobId}/references/${view}`, { method: "POST", body: form }); },
   runStage: (jobId: string, stage: string) => request<{ status: string }>(`/api/jobs/${jobId}/stages/${stage}/run`, { method: "POST" }),
