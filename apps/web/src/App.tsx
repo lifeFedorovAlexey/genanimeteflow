@@ -118,6 +118,11 @@ function nextStep(job: Job, capabilities?: Capabilities): { title: string; body:
   return { title: "Юнит готов", body: "Все доступные шаги успешно завершены.", tone: "done" };
 }
 
+function jobMaturity(job: Job): number {
+  const order = ["references", "geometry", "textures", "retopology", "rig", "ik", "motions", "export"];
+  return order.reduce((score, stage, index) => score + (job.stages[stage]?.status === "READY" ? index + 1 : 0), 0);
+}
+
 function App() {
   const [hardware, setHardware] = useState<Hardware>();
   const [capabilities, setCapabilities] = useState<Capabilities>();
@@ -135,7 +140,8 @@ function App() {
     if (capabilitiesResult.status === "fulfilled") setCapabilities(capabilitiesResult.value);
     if (jobsResult.status === "fulfilled") {
       setJobs(jobsResult.value);
-      setActive(current => current ? jobsResult.value.find(job => job.job_id === current.job_id) ?? current : jobsResult.value[0]);
+      const mostComplete = [...jobsResult.value].sort((left, right) => jobMaturity(right) - jobMaturity(left))[0];
+      setActive(current => current ? jobsResult.value.find(job => job.job_id === current.job_id) ?? current : mostComplete);
     }
     if (motionsResult.status === "fulfilled") setMotionCatalog(motionsResult.value);
     if (equipmentResult.status === "fulfilled") setEquipmentCatalog(equipmentResult.value);
@@ -145,7 +151,7 @@ function App() {
     else setError("");
   }, []);
   useEffect(() => { void refresh(); }, [refresh]);
-  useEffect(() => { if (!active) return; const timer = window.setInterval(() => { void api.jobs().then(list => { setJobs(list); const next = list.find(job => job.job_id === active.job_id); if (next) setActive(next); }).catch(() => undefined); }, 1000); return () => window.clearInterval(timer); }, [active?.job_id]);
+  useEffect(() => { if (!active) return; const timer = window.setInterval(() => { void api.jobs().then(list => { setJobs(list); const next = list.find(job => job.job_id === active.job_id); if (next) setActive(next); }).catch(() => undefined); }, 2000); return () => window.clearInterval(timer); }, [active?.job_id]);
 
   const create = async () => { setBusy(true); setError(""); try { const job = await api.createJob({ name: "Character Unit", profile: hardware?.recommendation ?? "BALANCED", resolution: 512, requested_provider: "AUTO" }); setActive(job); setJobs(list => [job, ...list]); } catch (err) { setError(err instanceof Error ? err.message : String(err)); } finally { setBusy(false); } };
   const upload = async (view: ViewName, file?: File) => { if (!active || !file) return; setBusy(true); setError(""); try { const job = await api.upload(active.job_id, view, file); setActive(job); setJobs(list => list.map(item => item.job_id === job.job_id ? job : item)); } catch (err) { setError(err instanceof Error ? err.message : String(err)); } finally { setBusy(false); } };
