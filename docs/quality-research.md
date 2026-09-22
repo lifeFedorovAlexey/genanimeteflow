@@ -112,6 +112,21 @@ vertices and the complete canonical mapping. This proves one real clip from
 library registration through target-rig retargeting; locomotion graph blending,
 the remaining acceptance clips and visual deformation review remain open.
 
+## End-to-end rig, motion and export job
+
+Job `c3454980-4591-42b9-af37-ec01d5f92977` was then driven through the actual
+API stages, not only direct worker calls. Retopology produced the rig input,
+UniRig returned a canonical validated character, and the motions stage
+normalized `Idle_No_Loop`, `Zombie_Walk_Fwd_Loop`, `NinjaJump_Start` and
+`Melee_Hook`; every output passed GLB and canonical-rig validation. The export
+worker assembled the four separate normalized actions through Blender NLA
+tracks, and the final `unit.glb` roundtrip contains exactly four animations,
+one skin, one embedded texture and a valid canonical rig. `unit.fbx` and the
+unit manifest were also created. The graph endpoint selected idle, walk, jump
+and attack states against those real actions. This is the first complete local
+animation/export proof; it is not yet a claim that the deformations visually
+match Mixamo on every body shape.
+
 Pixal3D's seven single-view checkpoint files total about 24.05 GB decimal,
 excluding auxiliary models, dependencies and build space. Whole-repository weight
 downloads would also fetch separate multiview checkpoints. Enumerate selected
