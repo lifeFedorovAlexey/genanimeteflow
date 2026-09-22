@@ -32,6 +32,13 @@
 .stage-status.working { color: #a9bbff; }
 .stage-action { min-width: 95px; } .stage-action.cancel { color: #ffb0b0; background: #3a2028; border-color: #70404c; }
 .stage-action:disabled { color: #687383; background: #161a20; border-color: #2c333d; }
+.retopo-settings { margin-top: 7px; color: #aebeff; font-size: 10px; }
+.retopo-settings summary { cursor: pointer; width: fit-content; }
+.retopo-fields { display: flex; flex-wrap: wrap; align-items: end; gap: 7px; margin-top: 7px; padding: 8px; background: #10151d; border: 1px solid #303b4b; border-radius: 6px; }
+.retopo-fields label { display: grid; gap: 3px; color: #7f8b9d; }
+.retopo-fields select, .retopo-fields input { min-width: 108px; padding: 4px 6px; color: #dfe6ef; background: #0c1117; border: 1px solid #384251; border-radius: 4px; font-size: 10px; }
+.retopo-fields input { width: 94px; min-width: 94px; }
+.retopo-fields button { margin: 0; padding: 5px 8px; font-size: 10px; }
 .motion-library { margin-top: 16px; }
 .motion-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; max-height: 250px; overflow: auto; padding: 2px; margin-top: 16px; }
 .motion-card { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 5px; min-height: 68px; padding: 11px 10px 9px 31px; color: #c9d2df; background: #11161e; border: 1px solid #2d3745; border-radius: 7px; text-align: left; }

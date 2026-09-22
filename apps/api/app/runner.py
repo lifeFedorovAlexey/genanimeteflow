@@ -416,14 +416,18 @@ class PipelineRunner:
             raise WorkerFailure("BLENDER_MISSING", "Blender executable was not found")
         job_dir = self.store.job_dir(manifest.job_id)
         source_mesh = job_dir / mesh_value
-        output_mesh = job_dir / "retopology" / "triangle.glb"
-        request = {"source_mesh": str(source_mesh), "output_mesh": str(output_mesh), "mode": "TRIANGLE", "target_faces": 30000}
+        mode = manifest.retopology_mode
+        output_mesh = job_dir / "retopology" / f"{mode.lower()}.glb"
+        request = {"source_mesh": str(source_mesh), "output_mesh": str(output_mesh), "mode": mode, "target_faces": manifest.retopology_target_faces}
         logger.info("Starting Blender retopology worker: %s", request)
         result = await asyncio.to_thread(self.process_manager.run_json_worker, [sys.executable, "-m", "workers.blender.worker"], request, REPO_ROOT, {"BLENDER_PATH": blender}, log_path, process_key=f"{manifest.job_id}:{StageName.RETOPOLOGY.value}")
         report = validate_glb(output_mesh)
         if not report.valid:
             raise WorkerFailure("RETOPOLOGY_OUTPUT_INVALID", "; ".join(report.errors))
-        manifest.stages[StageName.RETOPOLOGY.value].result = {"mode": result.payload.get("mode"), "source_mesh": mesh_value, "mesh_path": str(output_mesh.relative_to(job_dir)), "target_faces": request["target_faces"], "validation": report.__dict__}
+        manifest.stages[StageName.RETOPOLOGY.value].result = {"mode": result.payload.get("mode"), "source_mesh": mesh_value, "mesh_path": str(output_mesh.relative_to(job_dir)), "target_faces": request["target_faces"], "uv_generated": result.payload.get("uv_generated", False), "validation": report.__dict__}
+        if mode == "QUAD" and result.payload.get("uv_generated"):
+            manifest.warnings = [item for item in manifest.warnings if not item.startswith("QUAD retopology:")]
+            manifest.warnings.append("QUAD retopology: создан новый UV unwrap; проверьте проекцию текстуры перед экспортом.")
         logger.info("Retopology output saved: %s", output_mesh)
 
     async def _rig(self, manifest: JobManifest, logger: logging.Logger, log_path: Path) -> None:

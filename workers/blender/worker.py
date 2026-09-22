@@ -12,14 +12,18 @@ from workers.common.worker_protocol import read_request, write_result
 
 
 def run(request: dict) -> dict:
+    mode = str(request.get("mode", "KEEP_SOURCE")).upper()
     blender = os.getenv("BLENDER_PATH") or shutil.which("blender")
-    if not blender:
-        return {"ok": False, "category": "BLENDER_MISSING", "error": "Blender executable was not found; set BLENDER_PATH or install Blender"}
     source = Path(str(request.get("source_mesh", ""))).expanduser().resolve()
     if not source.is_file():
         return {"ok": False, "category": "INPUT_MISSING", "error": f"Source mesh was not found: {source}"}
     output = Path(str(request.get("output_mesh", ""))).expanduser().resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
+    if mode == "KEEP_SOURCE":
+        shutil.copy2(source, output)
+        return {"ok": True, "output_mesh": str(output), "mode": mode, "source_face_count": None, "output_face_count": None, "uv_generated": False, "stdout": "Source mesh preserved without Blender conversion", "stderr": ""}
+    if not blender:
+        return {"ok": False, "category": "BLENDER_MISSING", "error": "Blender executable was not found; set BLENDER_PATH or install Blender"}
     descriptor, request_name = tempfile.mkstemp(prefix="character-factory-blender-", suffix=".json", dir=output.parent)
     os.close(descriptor)
     request_file = Path(request_name)
@@ -40,7 +44,7 @@ def run(request: dict) -> dict:
         return {**result, "stdout": completed.stdout, "stderr": completed.stderr}
     if not output.is_file() or output.stat().st_size == 0:
         return {"ok": False, "category": "BLENDER_OUTPUT_INVALID", "error": f"Blender did not produce a non-empty output mesh: {output}", "stdout": completed.stdout, "stderr": completed.stderr}
-    return {"ok": True, "output_mesh": str(output), "mode": result.get("mode"), "source_face_count": result.get("source_face_count"), "output_face_count": result.get("output_face_count"), "stdout": completed.stdout, "stderr": completed.stderr}
+    return {"ok": True, "output_mesh": str(output), "mode": result.get("mode"), "source_face_count": result.get("source_face_count"), "output_face_count": result.get("output_face_count"), "uv_generated": result.get("uv_generated", False), "stdout": completed.stdout, "stderr": completed.stderr}
 
 
 if __name__ == "__main__":

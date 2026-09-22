@@ -13,7 +13,7 @@ from PIL import Image
 
 from app import main
 from app.job_store import JobStore
-from app.schemas import JobCreateRequest, ReferenceSlot, StageStatus
+from app.schemas import JobCreateRequest, ReferenceSlot, RetopologySettingsRequest, StageStatus
 
 
 class ReferenceUploadTests(unittest.TestCase):
@@ -60,6 +60,20 @@ class ReferenceUploadTests(unittest.TestCase):
                     self.upload(job.job_id)
                 self.assertEqual(error.exception.status_code, 409)
             self.assertEqual(source.read_bytes(), b"source used by worker")
+
+    def test_retopology_settings_are_persisted_and_invalidate_downstream(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = JobStore(Path(directory))
+            job = store.create(JobCreateRequest())
+            for record in job.stages.values():
+                record.status = StageStatus.READY
+            store.save(job)
+            with patch.object(main, "store", store):
+                updated = main.set_retopology_settings(job.job_id, RetopologySettingsRequest(mode="QUAD", target_faces=24000))
+            self.assertEqual(updated.retopology_mode, "QUAD")
+            self.assertEqual(updated.retopology_target_faces, 24000)
+            self.assertEqual(updated.stages["retopology"].status, StageStatus.INVALIDATED)
+            self.assertEqual(updated.stages["rig"].status, StageStatus.INVALIDATED)
 
 
 if __name__ == "__main__":

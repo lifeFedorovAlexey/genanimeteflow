@@ -144,6 +144,17 @@ vertices, 4 embedded textures, 42 bones and 10 selected animations. This is a
 pipeline acceptance result; it does not claim that a generated mesh is
 visually equivalent to Mixamo deformation on every character.
 
+## Quad retopology smoke run
+
+Blender 5.0's built-in Quadriflow was tested on the real textured Hunyuan
+mesh. The source had 828,316 faces; the QUAD path repaired its non-manifold
+input with Blender voxel remesh, then produced 28,908 faces and generated a
+valid UV layer. The resulting GLB passed validation with one material, one
+embedded texture, UV coordinates and normals. Because the repair path creates
+a fresh unwrap when source attributes cannot be preserved, the product now
+shows an explicit texture-projection warning and does not silently call this
+identical to texture-preserving production retopology.
+
 ## Multiview geometry smoke run
 
 On 2026-09-22 the official Hunyuan3D-2mv worker was run on three distinct

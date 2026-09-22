@@ -67,6 +67,8 @@ class JobManifest(BaseModel):
     clothing_assets: list[str] = Field(default_factory=list)
     motion_clips: list[str] = Field(default_factory=list)
     export_actions: list[str] = Field(default_factory=list)
+    retopology_mode: Literal["KEEP_SOURCE", "TRIANGLE", "QUAD"] = "TRIANGLE"
+    retopology_target_faces: int = Field(default=30000, ge=5000, le=80000)
     warnings: list[str] = Field(default_factory=list)
 
 
@@ -108,6 +110,11 @@ class EquipmentSelectionRequest(BaseModel):
 
 class ClothingSelectionRequest(BaseModel):
     assets: list[str] = Field(default_factory=list)
+
+
+class RetopologySettingsRequest(BaseModel):
+    mode: Literal["KEEP_SOURCE", "TRIANGLE", "QUAD"] = "TRIANGLE"
+    target_faces: int = Field(default=30000, ge=5000, le=80000)
 
 
 class EquipmentRegisterRequest(BaseModel):

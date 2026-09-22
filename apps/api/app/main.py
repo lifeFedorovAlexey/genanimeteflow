@@ -21,7 +21,7 @@ from .model_registry import ModelRegistry
 from .motion_library import MotionLibrary, MotionLibraryError
 from .pipeline_graph import STAGE_DEPENDENCIES
 from .runner import PipelineRunner, SingleGpuQueue
-from .schemas import AnimationGraphRequest, CacheCleanRequest, CacheCleanResult, CacheInventory, ClothingSelectionRequest, EquipmentRegisterRequest, EquipmentSelectionRequest, ExportSelectionRequest, JobCreateRequest, JobManifest, MotionRegisterRequest, MotionSelectionRequest, ReferenceSlot, Settings, StageName
+from .schemas import AnimationGraphRequest, CacheCleanRequest, CacheCleanResult, CacheInventory, ClothingSelectionRequest, EquipmentRegisterRequest, EquipmentSelectionRequest, ExportSelectionRequest, JobCreateRequest, JobManifest, MotionRegisterRequest, MotionSelectionRequest, ReferenceSlot, RetopologySettingsRequest, Settings, StageName
 from .storage import atomic_write_json, read_json
 from .schemas import StageStatus
 
@@ -118,6 +118,23 @@ def set_clothing_selection(job_id: str, request: ClothingSelectionRequest) -> Jo
     manifest.stages[StageName.CLOTHING.value].result = {}
     manifest.stages[StageName.CLOTHING.value].error_category = "UPSTREAM_CHANGED"
     manifest.stages[StageName.CLOTHING.value].error_message = "Clothing selection changed; transfer weights onto the character rig"
+    store.save(manifest)
+    return manifest
+
+
+@app.put("/api/jobs/{job_id}/retopology-settings", response_model=JobManifest)
+def set_retopology_settings(job_id: str, request: RetopologySettingsRequest) -> JobManifest:
+    manifest = get_job(job_id)
+    if manifest.retopology_mode == request.mode and manifest.retopology_target_faces == request.target_faces:
+        return manifest
+    manifest.retopology_mode = request.mode
+    manifest.retopology_target_faces = request.target_faces
+    store.invalidate_from(manifest, StageName.RETOPOLOGY)
+    record = manifest.stages[StageName.RETOPOLOGY.value]
+    record.status = StageStatus.INVALIDATED
+    record.result = {}
+    record.error_category = "UPSTREAM_CHANGED"
+    record.error_message = "Retopology settings changed; rebuild the selected topology"
     store.save(manifest)
     return manifest
 
