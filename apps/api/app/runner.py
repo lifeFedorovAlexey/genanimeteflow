@@ -215,7 +215,9 @@ class PipelineRunner:
             model_id = str(hunyuan["model_id"])
             multiview = model_id.endswith("2mv")
             output_dir = job_dir / "geometry" / ("hunyuan3d-2mv" if multiview else "hunyuan3d-2")
-            settings = {"model_id": model_id, "subfolder": "hunyuan3d-dit-v2-mv" if multiview else "hunyuan3d-dit-v2-0", "steps": 30, "octree_resolution": 380, "num_chunks": 20000, "seed": 42, "low_vram_mode": manifest.profile.upper() != "MAX"}
+            # Keep the official shape defaults for quality. 20k chunks is a
+            # deliberate VRAM guard for the target 12 GB RTX 4070.
+            settings = {"model_id": model_id, "subfolder": "hunyuan3d-dit-v2-mv" if multiview else "hunyuan3d-dit-v2-0", "steps": 50, "octree_resolution": 384, "num_chunks": 20000, "seed": 42, "low_vram_mode": manifest.profile.upper() != "MAX"}
             request = {"images": processed, "output_dir": str(output_dir), "settings": settings}
             logger.info("Starting official Hunyuan worker %s with %s views", model_id, len(processed))
             monitor = VramMonitor()
