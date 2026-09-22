@@ -245,6 +245,10 @@ class PipelineRunner:
             ignored = result.payload.get("ignored_views", [])
             if ignored:
                 manifest.warnings.append("Hunyuan3D-2mv currently consumes FRONT/LEFT/BACK; RIGHT was retained but not passed to this provider")
+            if len(processed) == 1:
+                warning = "Один ракурс: скрытая сторона и материалы приблизительны; для качества уровня Tripo добавьте LEFT, BACK и RIGHT."
+                manifest.warnings = [item for item in manifest.warnings if not item.startswith("Один ракурс:")]
+                manifest.warnings.append(warning)
             manifest.stages[StageName.GEOMETRY.value].result = {"mesh_path": str(mesh_path.relative_to(job_dir)), "settings": settings, "vram": vram, "provider_views": sorted(processed), "stdout": result.stdout[-4000:], "validation": report.__dict__}
             logger.info("Generated multiview mesh saved: %s", mesh_path)
             return
