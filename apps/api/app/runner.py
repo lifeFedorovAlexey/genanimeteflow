@@ -401,9 +401,14 @@ class PipelineRunner:
         equipment = manifest.stages[StageName.EQUIPMENT.value]
         equipment_mesh = equipment.result.get("mesh_path") if equipment.status is StageStatus.READY else None
         source_mesh = job_dir / (equipment_mesh if isinstance(equipment_mesh, str) else mesh_value)
+        motions = manifest.stages[StageName.MOTIONS.value]
+        normalized_by_action = {str(item.get("worker", {}).get("normalized_action")): str(item["mesh_path"]) for item in motions.result.get("clips", []) if item.get("mesh_path")}
+        missing_actions = [action for action in manifest.export_actions if action not in normalized_by_action]
+        if missing_actions:
+            raise WorkerFailure("EXPORT_ACTION_MISSING", "Selected normalized actions are unavailable: " + ", ".join(missing_actions))
         glb_path = job_dir / "export" / "unit.glb"
         fbx_path = job_dir / "export" / "unit.fbx"
-        request = {"source_mesh": str(source_mesh), "glb_output": str(glb_path), "fbx_output": str(fbx_path), "selected_actions": manifest.export_actions}
+        request = {"source_mesh": str(source_mesh), "motion_meshes": [str(job_dir / normalized_by_action[action]) for action in manifest.export_actions], "glb_output": str(glb_path), "fbx_output": str(fbx_path), "selected_actions": manifest.export_actions}
         logger.info("Starting Blender export worker: %s", request)
         result = await asyncio.to_thread(self.process_manager.run_json_worker, [sys.executable, "-m", "workers.blender.export_worker"], request, REPO_ROOT, {"BLENDER_PATH": blender}, log_path, process_key=f"{manifest.job_id}:{StageName.EXPORT.value}")
         roundtrip = result.payload.get("roundtrip", {})

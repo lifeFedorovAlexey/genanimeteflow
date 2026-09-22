@@ -25,6 +25,55 @@ def _filter_actions(selected: list[str]) -> list[str]:
     return available
 
 
+def _activate_actions(selected: list[str]) -> None:
+    armatures = [obj for obj in bpy.context.scene.objects if obj.type == "ARMATURE"]
+    if len(armatures) != 1:
+        raise RuntimeError(f"Export requires exactly one target armature, found {len(armatures)}")
+    if not selected:
+        return
+    target = armatures[0]
+    target.animation_data_create()
+    target.animation_data.action = None
+    for track in list(target.animation_data.nla_tracks):
+        target.animation_data.nla_tracks.remove(track)
+    for action_name in selected:
+        action = bpy.data.actions[action_name]
+        track = target.animation_data.nla_tracks.new()
+        track.name = action_name
+        frame_start = int(action.frame_range[0])
+        strip = track.strips.new(action_name, frame_start, action)
+        strip.action_frame_start = action.frame_range[0]
+        strip.action_frame_end = action.frame_range[1]
+        strip.frame_start = action.frame_range[0]
+        strip.frame_end = action.frame_range[1]
+    bpy.context.view_layer.objects.active = target
+    target.select_set(True)
+
+
+def _import_motion_actions(paths: list[str]) -> None:
+    """Import baked actions from normalized GLBs onto the base character.
+
+    The motion stage intentionally writes one validated GLB per clip. Export
+    is the assembly boundary: keep the base mesh/materials from the rigged
+    asset, retain only the action datablocks from each selected clip, and
+    remove the temporary imported motion objects before exporting.
+    """
+    for raw_path in paths:
+        path = Path(raw_path).resolve()
+        if not path.is_file():
+            raise RuntimeError(f"Normalized motion source does not exist: {path}")
+        before_objects = set(bpy.context.scene.objects)
+        before_actions = set(bpy.data.actions)
+        bpy.ops.import_scene.gltf(filepath=str(path))
+        imported_actions = [action for action in bpy.data.actions if action not in before_actions]
+        if not imported_actions:
+            raise RuntimeError(f"Normalized motion source contains no action: {path.name}")
+        for action in imported_actions:
+            action.use_fake_user = True
+        for obj in [obj for obj in bpy.context.scene.objects if obj not in before_objects]:
+            bpy.data.objects.remove(obj, do_unlink=True)
+
+
 def _roundtrip(glb_path: Path) -> dict[str, int]:
     bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.ops.import_scene.gltf(filepath=str(glb_path))
@@ -45,10 +94,12 @@ def run(request: dict) -> dict:
         raise RuntimeError(f"Export source does not exist: {source}")
     bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.ops.import_scene.gltf(filepath=str(source))
+    _import_motion_actions([str(path) for path in request.get("motion_meshes", [])])
     available = _filter_actions(selected)
+    _activate_actions(selected)
     glb.parent.mkdir(parents=True, exist_ok=True)
     fbx.parent.mkdir(parents=True, exist_ok=True)
-    bpy.ops.export_scene.gltf(filepath=str(glb), export_format="GLB", export_materials="EXPORT", export_animations=bool(selected))
+    bpy.ops.export_scene.gltf(filepath=str(glb), export_format="GLB", export_materials="EXPORT", export_animations=bool(selected), export_animation_mode="NLA_TRACKS")
     if not glb.is_file() or glb.stat().st_size == 0:
         raise RuntimeError("GLB exporter did not create a non-empty file")
     bpy.ops.export_scene.fbx(filepath=str(fbx), add_leaf_bones=False, bake_anim=bool(selected))
