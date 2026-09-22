@@ -97,11 +97,26 @@ function App() {
   const [motionCatalog, setMotionCatalog] = useState<MotionCatalog>();
   const [equipmentCatalog, setEquipmentCatalog] = useState<EquipmentCatalog>();
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [cacheItems, setCacheItems] = useState<Array<{ job_id: string; cache_bytes: number; cleanable: boolean; reason: string }>>([]);
   const [active, setActive] = useState<Job>();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const refresh = useCallback(async () => { try { const [hw, caps, list, motions, equipment] = await Promise.all([api.hardware(), api.capabilities(), api.jobs(), api.motions(), api.equipment()]); setHardware(hw); setCapabilities(caps); setMotionCatalog(motions); setEquipmentCatalog(equipment); setJobs(list); setActive(current => current ? list.find(job => job.job_id === current.job_id) ?? current : list[0]); } catch (err) { setError(err instanceof Error ? err.message : String(err)); } }, []);
+  const refresh = useCallback(async () => {
+    const [hardwareResult, capabilitiesResult, jobsResult, motionsResult, equipmentResult, cacheResult] = await Promise.allSettled([api.hardware(), api.capabilities(), api.jobs(), api.motions(), api.equipment(), api.cache()]);
+    if (hardwareResult.status === "fulfilled") setHardware(hardwareResult.value);
+    if (capabilitiesResult.status === "fulfilled") setCapabilities(capabilitiesResult.value);
+    if (jobsResult.status === "fulfilled") {
+      setJobs(jobsResult.value);
+      setActive(current => current ? jobsResult.value.find(job => job.job_id === current.job_id) ?? current : jobsResult.value[0]);
+    }
+    if (motionsResult.status === "fulfilled") setMotionCatalog(motionsResult.value);
+    if (equipmentResult.status === "fulfilled") setEquipmentCatalog(equipmentResult.value);
+    if (cacheResult.status === "fulfilled") setCacheItems(cacheResult.value.items);
+    const criticalFailure = [capabilitiesResult, jobsResult, cacheResult].find(result => result.status === "rejected");
+    if (criticalFailure?.status === "rejected") setError(criticalFailure.reason instanceof Error ? criticalFailure.reason.message : String(criticalFailure.reason));
+    else setError("");
+  }, []);
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => { if (!active) return; const timer = window.setInterval(() => { void api.jobs().then(list => { setJobs(list); const next = list.find(job => job.job_id === active.job_id); if (next) setActive(next); }).catch(() => undefined); }, 1000); return () => window.clearInterval(timer); }, [active?.job_id]);
 
@@ -134,10 +149,11 @@ function App() {
     return ["rifle", "pistol", "sword", "shield", "staff", "bow"].find(type => tags.includes(type)) ?? null;
   }, [active?.equipment_assets, equipmentCatalog]);
   const resultJobs = useMemo(() => jobs.filter(job => job.stages.export?.status === "READY").slice(0, 20), [jobs]);
+  const cleanableCache = useMemo(() => cacheItems.filter(item => item.cleanable && item.cache_bytes > 0), [cacheItems]);
   const next = active ? nextStep(active, capabilities) : undefined;
 
   return <div className="app-shell">
-    <header className="topbar"><div className="brand"><div className="brand-mark">CF</div><div><h1>Character Factory</h1><p>Build a playable character, one clear step at a time</p></div></div><div className="top-actions"><span className="status-dot" /> LOCAL ONLY <button className="secondary" onClick={() => void refresh()}>Refresh</button></div></header>
+    <header className="topbar"><div className="brand"><div className="brand-mark">CF</div><div><h1>Character Factory</h1><p>Build a playable character, one clear step at a time</p></div></div><div className="top-actions"><span className="status-dot" /> LOCAL ONLY {cleanableCache.length > 0 && <button className="secondary" onClick={() => { if (window.confirm(`Clear intermediate files for ${cleanableCache.length} abandoned unit(s)? References and exports are protected.`)) void api.cleanCache(cleanableCache.map(item => item.job_id)).then(() => void refresh()).catch(err => setError(err instanceof Error ? err.message : String(err))); }}>Clean cache · {cleanableCache.length}</button>} <button className="secondary" onClick={() => void refresh()}>Refresh</button></div></header>
     <main className="workspace"><aside className="sidebar"><div className="section-head"><span>UNITS</span><button className="icon-button" onClick={() => void create()} disabled={busy} aria-label="Create a new unit" title="Create a new unit">＋</button></div>{jobs.length === 0 && <p className="muted">Create your first unit</p>}{jobs.map(job => <button key={job.job_id} className={`job-row ${active?.job_id === job.job_id ? "selected" : ""}`} onClick={() => setActive(job)}><span className={`job-icon ${job.status === "RUNNING" ? "pulse" : ""}`}>{job.status === "READY" ? "✓" : "◇"}</span><span><strong>{job.job_id.slice(0, 8)}</strong><small>{job.status === "RUNNING" ? "Working" : job.status === "READY" ? "Ready" : "In progress"}</small></span></button>)}<div className="sidebar-bottom"><span>LOCAL WORKSPACE</span><strong>Nothing leaves this computer</strong></div></aside>
       <section className="content"><div className="content-title"><div><div className="eyebrow">{active ? `UNIT ${active.job_id.slice(0, 8)}` : "WELCOME"}</div><h2>{active ? "Build your character" : "Character Factory"}</h2></div><button className="primary" onClick={() => void create()} disabled={busy}>＋ New unit</button></div>{error && <div className="error-banner"><strong>Something needs attention</strong><span>{error}</span></div>}
         {!active ? <div className="welcome"><h3>Start with one character image</h3><p>We will guide the unit through shape, skeleton, motion and export.</p><button className="primary" onClick={() => void create()}>Create unit</button></div> : <>

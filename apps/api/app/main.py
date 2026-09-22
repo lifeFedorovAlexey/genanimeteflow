@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from .config import ensure_directories
 from .animation_graph import AnimationGraph, AnimationInput, MotionClip
 from .capabilities import capabilities
+from .cache import clean as clean_cache, inventory as cache_inventory
 from .equipment_library import EquipmentLibrary, EquipmentLibraryError
 from .hardware import detect_hardware
 from .job_store import JobStore
@@ -19,7 +20,7 @@ from .model_registry import ModelRegistry
 from .motion_library import MotionLibrary, MotionLibraryError
 from .pipeline_graph import STAGE_DEPENDENCIES
 from .runner import PipelineRunner, SingleGpuQueue
-from .schemas import AnimationGraphRequest, ClothingSelectionRequest, EquipmentRegisterRequest, EquipmentSelectionRequest, ExportSelectionRequest, JobCreateRequest, JobManifest, MotionRegisterRequest, MotionSelectionRequest, ReferenceSlot, Settings, StageName
+from .schemas import AnimationGraphRequest, CacheCleanRequest, CacheCleanResult, CacheInventory, ClothingSelectionRequest, EquipmentRegisterRequest, EquipmentSelectionRequest, ExportSelectionRequest, JobCreateRequest, JobManifest, MotionRegisterRequest, MotionSelectionRequest, ReferenceSlot, Settings, StageName
 from .storage import atomic_write_json, read_json
 from .schemas import StageStatus
 
@@ -186,6 +187,19 @@ def put_settings(settings: Settings) -> Settings:
     path = Path(__file__).resolve().parents[3] / "data" / "settings.json"
     atomic_write_json(path, settings.model_dump(mode="json"))
     return settings
+
+
+@app.get("/api/cache", response_model=CacheInventory)
+def get_cache() -> CacheInventory:
+    return CacheInventory(items=cache_inventory(store))
+
+
+@app.post("/api/cache/clean", response_model=CacheCleanResult)
+def post_cache_clean(request: CacheCleanRequest) -> CacheCleanResult:
+    try:
+        return CacheCleanResult.model_validate(clean_cache(store, request.job_ids))
+    except (FileNotFoundError, ValueError) as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
 
 
 @app.get("/api/jobs", response_model=list[JobManifest])

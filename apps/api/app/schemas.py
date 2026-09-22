@@ -139,3 +139,26 @@ class AnimationGraphRequest(BaseModel):
     emote: str | None = None
     vertical_velocity: float = 0.0
     transition_duration: float | None = None
+
+
+class CacheCleanRequest(BaseModel):
+    job_ids: list[str] = Field(default_factory=list, min_length=1)
+
+
+class CacheItem(BaseModel):
+    job_id: str
+    status: str
+    cache_bytes: int
+    protected_bytes: int
+    cleanable: bool
+    reason: str
+
+
+class CacheInventory(BaseModel):
+    items: list[CacheItem] = Field(default_factory=list)
+
+
+class CacheCleanResult(BaseModel):
+    cleaned: list[dict[str, Any]] = Field(default_factory=list)
+    skipped: list[dict[str, str]] = Field(default_factory=list)
+    deleted_bytes: int = 0
