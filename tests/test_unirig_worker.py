@@ -6,8 +6,15 @@ import subprocess
 import sys
 import unittest
 
+from workers.unirig.worker import _merge_failure
+
 
 class UniRigWorkerTests(unittest.TestCase):
+    def test_merge_traceback_is_reported_as_rig_validation_failure(self) -> None:
+        category, detail = _merge_failure("Traceback (most recent call last):\nValueError: Humanoid canonical mapping expects two arm roots, got 0", "")
+        self.assertEqual(category, "RIG_VALIDATION_FAILED")
+        self.assertIn("ValueError", detail)
+
     def test_reports_missing_official_checkout(self) -> None:
         environment = os.environ.copy()
         environment.pop("UNIRIG_ROOT", None)

@@ -28,6 +28,16 @@ def _wsl_command(shell: str, distro: str, python_bin: str, unirig_root: Path, re
     return [shell, "-d", distro, "--", "bash", "-lc", setup]
 
 
+def _merge_failure(stderr: str, stdout: str) -> tuple[str, str]:
+    """Classify Blender's zero-exit traceback instead of reporting fake success."""
+    combined = f"{stderr}\n{stdout}".strip()
+    lines = [line.strip() for line in combined.splitlines() if line.strip()]
+    detail = next((line for line in reversed(lines) if line.startswith(("ValueError:", "RuntimeError:", "Traceback"))), "UniRig Blender merge failed")
+    if "canonical mapping" in combined.lower() or "humanoid" in combined.lower():
+        return "RIG_VALIDATION_FAILED", detail
+    return "UNIRIG_ERROR", detail
+
+
 def run(request: dict) -> dict:
     root_value = os.getenv("UNIRIG_ROOT")
     if not root_value:
@@ -67,7 +77,7 @@ def run(request: dict) -> dict:
     def execute(label: str, command: list[str], cwd: Path, env: dict[str, str] | None = None) -> bool:
         return_code, stdout, stderr = _run(command, cwd, env)
         logs.append({"stage": label, "command": command, "return_code": return_code, "stdout": stdout[-12000:], "stderr": stderr[-12000:]})
-        return return_code == 0
+        return return_code == 0 and not (label == "merge" and "Traceback (most recent call last)" in stderr)
 
     extract_script = repo_root / "workers" / "unirig" / "blender_extract.py"
     extract_env = os.environ.copy()
@@ -130,7 +140,9 @@ def run(request: dict) -> dict:
         repo_root,
         extract_env,
     ):
-        return {"ok": False, "category": "UNIRIG_ERROR", "error": "UniRig Blender merge failed", "logs": logs}
+        merge_log = logs[-1]
+        category, detail = _merge_failure(str(merge_log.get("stderr", "")), str(merge_log.get("stdout", "")))
+        return {"ok": False, "category": category, "error": f"UniRig Blender merge failed: {detail}", "logs": logs}
     if not rigged.is_file() or rigged.stat().st_size == 0:
         return {"ok": False, "category": "UNIRIG_OUTPUT_INVALID", "error": f"UniRig merge did not produce a non-empty GLB: {rigged}", "logs": logs}
     return {"ok": True, "provider": "UniRigProvider", "rigged_mesh": str(rigged), "skeleton": str(skeleton_prediction), "skin": str(skin_prediction), "logs": logs}
