@@ -13,7 +13,24 @@ export interface Hardware { os: Record<string, unknown>; cpu: Record<string, unk
 export interface Capabilities { providers: Record<string, { available: boolean; reason?: string }>; stages: Record<string, { available: boolean; description?: string; reason?: string }>; }
 export interface CacheItem { job_id: string; status: string; cache_bytes: number; protected_bytes: number; cleanable: boolean; reason: string; }
 export interface AcceptanceReport { job_id: string; valid: boolean; checks: Array<{ id: string; label: string; passed: boolean; detail: string }>; metrics: { vertices: number; textures: number; bones: number; animations: number; selected_actions: number }; }
-async function request<T>(url: string, init?: RequestInit): Promise<T> { const response = await fetch(url, init); if (!response.ok) throw new Error((await response.json().catch(() => null))?.detail ?? `${response.status} ${response.statusText}`); return response.json() as Promise<T>; }
+const REQUEST_TIMEOUT_MS = 8000;
+
+async function request<T>(url: string, init?: RequestInit): Promise<T> {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, { ...init, signal: controller.signal });
+    if (!response.ok) throw new Error((await response.json().catch(() => null))?.detail ?? `${response.status} ${response.statusText}`);
+    return response.json() as Promise<T>;
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error("Локальный API не ответил за 8 секунд. Проверьте состояние сервера и повторите загрузку.");
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
 export const api = {
   hardware: () => request<Hardware>("/api/hardware"), capabilities: () => request<Capabilities>("/api/capabilities"), jobs: () => request<Job[]>("/api/jobs"), motions: () => request<MotionCatalog>("/api/motions"), equipment: () => request<EquipmentCatalog>("/api/equipment"), cache: () => request<{ items: CacheItem[] }>("/api/cache"), cleanCache: (jobIds: string[]) => request<{ cleaned: Array<{ job_id: string; deleted_bytes: number }>; skipped: Array<{ job_id: string; reason: string }>; deleted_bytes: number }>("/api/cache/clean", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ job_ids: jobIds }) }),
   createJob: (body: { name: string; profile: string; resolution: number; requested_provider: string }) => request<Job>("/api/jobs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
