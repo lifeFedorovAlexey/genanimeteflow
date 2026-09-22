@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 from workers.hunyuan.worker import run
 from workers.hunyuan.texture_worker import run as run_texture
+from workers.hunyuan.texture_inference import _prepare_paint_image
 from app.runner import choose_geometry_provider
 
 
@@ -85,6 +86,18 @@ class HunyuanWorkerTests(unittest.TestCase):
             with patch.dict(os.environ, {"HUNYUAN_ROOT": str(root)}, clear=False):
                 result = run_texture({"mesh_path": str(root / "missing.glb"), "image": str(root / "missing.png"), "output_mesh": str(root / "out.glb")})
         self.assertEqual(result["category"], "INPUT_MISSING")
+
+    def test_paint_input_composites_transparency_on_white(self) -> None:
+        from PIL import Image
+
+        source = Image.new("RGBA", (2, 1), (0, 0, 0, 0))
+        source.putpixel((0, 0), (255, 0, 0, 255))
+
+        prepared = _prepare_paint_image(source)
+
+        self.assertEqual(prepared.mode, "RGB")
+        self.assertEqual(prepared.getpixel((0, 0)), (255, 0, 0))
+        self.assertEqual(prepared.getpixel((1, 0)), (255, 255, 255))
 
 
 if __name__ == "__main__":

@@ -21,6 +21,22 @@ def _allow_official_local_pipeline_code() -> None:
     DiffusionPipeline.from_pretrained = classmethod(trusted_from_pretrained)
 
 
+def _prepare_paint_image(image):
+    """Give Hunyuan Paint an opaque RGB reference, never a cutout alpha mask.
+
+    The reference preprocessor intentionally writes transparent PNGs for shape
+    reconstruction. Paint interprets those transparent pixels as image input,
+    which can turn the cutout boundary into white blocks and dark speckles.
+    Compositing over the reference's neutral white background keeps that alpha
+    representation local to geometry generation and gives Paint a real image.
+    """
+    from PIL import Image
+
+    rgba = image.convert("RGBA")
+    background = Image.new("RGBA", rgba.size, (255, 255, 255, 255))
+    return Image.alpha_composite(background, rgba).convert("RGB")
+
+
 def run(request: dict) -> dict:
     official_root = Path(os.environ.get("HUNYUAN_ROOT", ".")).expanduser().resolve()
     if str(official_root) not in sys.path:
@@ -44,7 +60,9 @@ def run(request: dict) -> dict:
     # its similarly named offload helper expects a ``components`` mapping that
     # does not exist. Device placement is handled by the official pipeline.
     started = time.perf_counter()
-    textured = pipeline(loaded, image=Image.open(request["image"]).convert("RGBA"))
+    with Image.open(request["image"]) as source_image:
+        paint_image = _prepare_paint_image(source_image)
+    textured = pipeline(loaded, image=paint_image)
     output_path = Path(request["output_mesh"])
     output_path.parent.mkdir(parents=True, exist_ok=True)
     textured.export(output_path)
