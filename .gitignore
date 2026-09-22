@@ -30,3 +30,4 @@ spar3d-*.log
 apps/web/vite.config.js
 apps/web/vite.config.d.ts
 jobs/*/clothing/
+jobs/*/acceptance/
