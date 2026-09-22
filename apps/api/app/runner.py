@@ -27,6 +27,36 @@ from .schemas import JobManifest, StageName, StageStatus
 from tools.validation.rig import validate_rigged_glb
 
 
+def choose_geometry_provider(
+    requested: str,
+    view_count: int,
+    *,
+    multiview_ready: bool,
+    single_view_ready: bool,
+    spar3d_ready: bool,
+) -> tuple[str, str | None]:
+    """Select a real provider and explain every automatic downgrade."""
+    if requested == "HunyuanMultiviewProvider":
+        return "hunyuan-multiview", None
+    if requested == "HunyuanSingleViewProvider":
+        return "hunyuan-single", None
+    if requested == "Spar3DProvider":
+        return "spar3d", None
+    if requested != "AUTO":
+        raise ValueError(f"Unsupported geometry provider: {requested}")
+    if view_count >= 2 and multiview_ready:
+        return "hunyuan-multiview", None
+    if view_count == 1 and spar3d_ready:
+        return "spar3d", None
+    if view_count >= 2 and spar3d_ready:
+        return "spar3d", "Hunyuan3D-2mv недоступен; SPAR3D использует только FRONT, дополнительные ракурсы не были поданы в inference."
+    if view_count == 1 and single_view_ready:
+        return "hunyuan-single", "SPAR3D недоступен; использован реальный Hunyuan3D single-view fallback."
+    if view_count >= 2 and single_view_ready:
+        return "unavailable", "Для нескольких ракурсов нужен Hunyuan3D-2mv или SPAR3D; Hunyuan single-view не принимает этот набор входов."
+    return "unavailable", "Ни один совместимый geometry provider не установлен для текущего набора ракурсов."
+
+
 class SingleGpuQueue:
     """Process-wide serialization boundary for GPU work."""
 
@@ -232,23 +262,24 @@ class PipelineRunner:
         hunyuan = models.get("hunyuan3d-2mv", {"installed": False, "reason": "Hunyuan3D-2mv is not configured"})
         hunyuan_single = models.get("hunyuan3d-2", {"installed": False, "reason": "Hunyuan3D-2 single-view is not configured"})
         spar3d = models.get("spar3d", {"installed": False, "reason": "SPAR3D is not configured"})
-        use_multiview = len(processed) >= 2 and bool(hunyuan["installed"])
-        use_single_view = len(processed) == 1 and bool(hunyuan_single["installed"])
-        if requested == "HunyuanMultiviewProvider":
-            use_hunyuan = True
-            hunyuan = hunyuan
-        elif requested == "HunyuanSingleViewProvider":
-            use_hunyuan = True
-            hunyuan = hunyuan_single
-        else:
-            use_hunyuan = use_multiview or use_single_view
-            hunyuan = hunyuan if use_multiview else hunyuan_single
+        selected_provider, fallback_reason = choose_geometry_provider(
+            requested,
+            len(processed),
+            multiview_ready=bool(hunyuan["installed"]),
+            single_view_ready=bool(hunyuan_single["installed"]),
+            spar3d_ready=bool(spar3d["installed"]),
+        )
+        manifest.fallback_reason = fallback_reason
+        if selected_provider == "unavailable":
+            raise WorkerFailure("MODEL_MISSING", fallback_reason or "No compatible geometry provider is available")
+        use_hunyuan = selected_provider.startswith("hunyuan")
+        hunyuan = hunyuan if selected_provider == "hunyuan-multiview" else hunyuan_single
         if use_hunyuan:
             if not hunyuan["installed"]:
                 raise WorkerFailure("MODEL_MISSING", str(hunyuan["reason"]))
-            if requested == "HunyuanMultiviewProvider" and len(processed) < 2:
+            if selected_provider == "hunyuan-multiview" and len(processed) < 2:
                 raise WorkerFailure("INPUT_UNSUPPORTED", "Hunyuan3D-2mv requires FRONT plus at least one additional processed view")
-            if requested == "HunyuanSingleViewProvider" and len(processed) != 1:
+            if selected_provider == "hunyuan-single" and len(processed) != 1:
                 raise WorkerFailure("INPUT_UNSUPPORTED", "Hunyuan3D-2 single-view expects only FRONT")
             job_dir = self.store.job_dir(manifest.job_id)
             model_id = str(hunyuan["model_id"])
@@ -280,7 +311,7 @@ class PipelineRunner:
             report = validate_glb(mesh_path)
             if not report.valid:
                 raise WorkerFailure("PROVIDER_OUTPUT_INVALID", "; ".join(report.errors))
-            manifest.actual_provider = result.payload.get("provider", "HunyuanMultiviewProvider")
+            manifest.actual_provider = result.payload.get("provider", "HunyuanMultiviewProvider" if multiview else "HunyuanSingleViewProvider")
             ignored = result.payload.get("ignored_views", [])
             if ignored:
                 manifest.warnings.append(f"Hunyuan3D-2mv did not consume these supplied views: {', '.join(ignored)}")
@@ -289,13 +320,9 @@ class PipelineRunner:
                 manifest.warnings = [item for item in manifest.warnings if not item.startswith("Один ракурс:")]
                 manifest.warnings.append(warning)
             manifest.stages[StageName.GEOMETRY.value].result = {"mesh_path": str(mesh_path.relative_to(job_dir)), "settings": settings, "vram": vram, "provider_views": sorted(processed), "stdout": result.stdout[-4000:], "validation": report.__dict__}
-            logger.info("Generated multiview mesh saved: %s", mesh_path)
+            logger.info("Generated Hunyuan mesh saved: %s", mesh_path)
             return
-        if requested in {"HunyuanMultiviewProvider", "HunyuanSingleViewProvider"}:
-            raise WorkerFailure("MODEL_MISSING", str(hunyuan["reason"]))
         if not spar3d["installed"]:
-            if requested == "AUTO" and (hunyuan["installed"] or hunyuan_single["installed"]):
-                raise WorkerFailure("MODEL_MISSING", "Hunyuan model is configured but not ready for the current input")
             raise WorkerFailure("MODEL_MISSING", str(spar3d["reason"]))
         job_dir = self.store.job_dir(manifest.job_id)
         output_dir = job_dir / "geometry" / "spar3d"
