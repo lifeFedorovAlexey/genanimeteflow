@@ -289,7 +289,7 @@ async def job_events(job_id: str) -> StreamingResponse:
             if encoded != last:
                 yield f"data: {encoded}\n\n"
                 last = encoded
-            if manifest.status in {"READY", "FAILED"}:
+            if manifest.status in {"READY", "FAILED", "CANCELLED"}:
                 break
             await asyncio.sleep(0.5)
 

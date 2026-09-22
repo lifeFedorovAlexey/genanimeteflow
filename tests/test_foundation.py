@@ -92,6 +92,23 @@ class FoundationTests(unittest.TestCase):
             self.assertEqual(loaded.stages[StageName.REFERENCES.value].status, StageStatus.PENDING)
             self.assertTrue((Path(temporary) / manifest.job_id / "references" / "original").is_dir())
 
+    def test_job_store_recovers_running_stage_as_cancelled_after_restart(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            store = JobStore(root)
+            manifest = store.create(JobCreateRequest())
+            manifest.status = "RUNNING"
+            manifest.stages[StageName.GEOMETRY.value].status = StageStatus.RUNNING
+            store.save(manifest)
+
+            restarted_store = JobStore(root)
+            self.assertEqual(restarted_store.recover_incomplete(), 1)
+            recovered = restarted_store.get(manifest.job_id)
+            stage = recovered.stages[StageName.GEOMETRY.value]
+            self.assertEqual(recovered.status, "CANCELLED")
+            self.assertEqual(stage.status, StageStatus.CANCELLED)
+            self.assertEqual(stage.error_category, "APP_RESTARTED")
+
     def test_dependency_graph_invalidates_only_downstream_stages(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             store = JobStore(Path(temporary))

@@ -118,7 +118,13 @@ class PipelineRunner:
         finally:
             record.finished_at = datetime.now(UTC)
             record.duration_seconds = (record.finished_at - started).total_seconds() if started else None
-            manifest.status = "READY" if all(item.status in {StageStatus.READY, StageStatus.PENDING} for item in manifest.stages.values()) else "FAILED"
+            statuses = {item.status for item in manifest.stages.values()}
+            if StageStatus.CANCELLED in statuses:
+                manifest.status = "CANCELLED"
+            elif statuses & {StageStatus.FAILED, StageStatus.FAILED_OOM}:
+                manifest.status = "FAILED"
+            else:
+                manifest.status = "READY" if all(item.status in {StageStatus.READY, StageStatus.PENDING} for item in manifest.stages.values()) else "RUNNING"
             self.store.save(manifest)
             for handler in logger.handlers:
                 handler.close()

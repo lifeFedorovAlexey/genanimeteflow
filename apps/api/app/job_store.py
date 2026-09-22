@@ -78,7 +78,7 @@ class JobStore:
                     record.error_message = "Stage was interrupted because the API process restarted"
                     changed = True
             if changed:
-                manifest.status = "FAILED"
+                manifest.status = "CANCELLED"
                 self.save(manifest)
                 recovered += 1
         return recovered
