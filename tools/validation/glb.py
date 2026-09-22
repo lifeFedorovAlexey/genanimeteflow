@@ -24,6 +24,9 @@ class GlbValidationReport:
     face_count: int = 0
     material_count: int = 0
     texture_count: int = 0
+    uv_primitive_count: int = 0
+    missing_uv_primitive_count: int = 0
+    normal_primitive_count: int = 0
     skin_count: int = 0
     animation_count: int = 0
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -176,6 +179,21 @@ def validate_glb(path: Path, require_skeleton: bool = False, require_animations:
     if not meshes:
         report.errors.append("GLB contains no meshes")
     accessors = document.get("accessors", [])
+    materials = document.get("materials", [])
+
+    def material_uses_texture(material_index: int | None) -> bool:
+        if material_index is None or material_index < 0 or material_index >= len(materials):
+            return False
+        material = materials[material_index]
+        pbr = material.get("pbrMetallicRoughness", {})
+        return any(
+            isinstance(material.get(key), dict) and material[key].get("index") is not None
+            for key in ("normalTexture", "occlusionTexture", "emissiveTexture")
+        ) or any(
+            isinstance(pbr.get(key), dict) and pbr[key].get("index") is not None
+            for key in ("baseColorTexture", "metallicRoughnessTexture")
+        )
+
     for mesh_index, mesh in enumerate(meshes):
         primitives = mesh.get("primitives", [])
         if not primitives:
@@ -183,6 +201,20 @@ def validate_glb(path: Path, require_skeleton: bool = False, require_animations:
         for primitive_index, primitive in enumerate(primitives):
             report.primitive_count += 1
             attributes = primitive.get("attributes", {})
+            if "TEXCOORD_0" in attributes:
+                report.uv_primitive_count += 1
+                try:
+                    uv_values = GlbReader.accessor_values(reader, attributes["TEXCOORD_0"])
+                except ValueError as error:
+                    report.errors.append(str(error))
+                else:
+                    if any(not all(math.isfinite(float(component)) for component in uv) for uv in uv_values):
+                        report.errors.append(f"Mesh {mesh_index} primitive {primitive_index} contains non-finite UVs")
+            elif material_uses_texture(primitive.get("material")):
+                report.missing_uv_primitive_count += 1
+                report.errors.append(f"Mesh {mesh_index} primitive {primitive_index} has textured material but no TEXCOORD_0 attribute")
+            if "NORMAL" in attributes:
+                report.normal_primitive_count += 1
             position_accessor = attributes.get("POSITION")
             if position_accessor is None:
                 report.errors.append(f"Mesh {mesh_index} primitive {primitive_index} has no POSITION attribute")

@@ -312,13 +312,18 @@ class PipelineRunner:
         mesh_path = job_dir / mesh_value
         if manifest.actual_provider in {"HunyuanMultiviewProvider", "HunyuanSingleViewProvider"}:
             front = manifest.references.get("front")
-            hunyuan = next((item for item in self.models.status() if item["id"] == "hunyuan3d-2mv"), None)
+            # Paint is a separate Hunyuan pipeline and does not require the
+            # multiview shape checkpoint. Prefer the single-view registration
+            # so a local install without 2mv still has a truthful texture path.
+            hunyuan = next((item for item in self.models.status() if item["id"] == "hunyuan3d-2" and item["installed"]), None)
+            hunyuan = hunyuan or next((item for item in self.models.status() if item["id"] == "hunyuan3d-2mv" and item["installed"]), None)
             if not hunyuan or not hunyuan["installed"]:
-                raise WorkerFailure("MODEL_MISSING", (hunyuan or {}).get("reason", "Hunyuan Paint environment is not ready"))
+                configured = next((item for item in self.models.status() if item["id"] in {"hunyuan3d-2", "hunyuan3d-2mv"}), None)
+                raise WorkerFailure("MODEL_MISSING", (configured or {}).get("reason", "Hunyuan Paint environment is not ready"))
             if not front or not front.processed_path:
                 raise RuntimeError("FRONT reference is required for Hunyuan Paint")
             textured_mesh = job_dir / "textures" / "hunyuan-paint" / "textured.glb"
-            texture_request = {"mesh_path": str(mesh_path), "image": str(job_dir / front.processed_path), "output_mesh": str(textured_mesh), "texture_resolution": 1024, "low_vram_mode": manifest.profile.upper() != "MAX"}
+            texture_request = {"mesh_path": str(mesh_path), "image": str(job_dir / front.processed_path), "output_mesh": str(textured_mesh), "model_id": hunyuan["model_id"], "texture_resolution": 1024, "low_vram_mode": manifest.profile.upper() != "MAX"}
             logger.info("Starting official Hunyuan Paint worker")
             result = await asyncio.to_thread(
                 self.process_manager.run_json_worker,

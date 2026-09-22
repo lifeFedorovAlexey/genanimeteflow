@@ -65,9 +65,9 @@ class ModelRegistry:
         except (OSError, subprocess.SubprocessError) as error:
             status = {"ready": False, "reason": f"UniRig WSL environment could not start: {error}"}
         else:
-            output = f"{completed.stdout}\n{completed.stderr}".strip()
+            output = f"{completed.stdout}\n{completed.stderr}".replace("\x00", "").strip()
             if completed.returncode != 0:
-                last_line = next((line.strip() for line in reversed(output.splitlines()) if line.strip()), "unknown runtime failure")
+                last_line = next((line.strip() for line in reversed(output.splitlines()) if line.strip()), f"exit code {completed.returncode}")
                 status = {"ready": False, "reason": f"UniRig WSL dependencies are not ready: {last_line}"}
             elif "cuda=True" not in completed.stdout:
                 status = {"ready": False, "reason": "UniRig WSL Python cannot use CUDA"}
