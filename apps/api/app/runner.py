@@ -287,7 +287,7 @@ class PipelineRunner:
             output_dir = job_dir / "geometry" / ("hunyuan3d-2mv" if multiview else "hunyuan3d-2")
             # Keep the official shape defaults for quality. 20k chunks is a
             # deliberate VRAM guard for the target 12 GB RTX 4070.
-            settings = {"model_id": model_id, "subfolder": "hunyuan3d-dit-v2-mv" if multiview else "hunyuan3d-dit-v2-0", "steps": 50, "octree_resolution": 384, "num_chunks": 20000, "seed": 42, "low_vram_mode": manifest.profile.upper() != "MAX"}
+            settings = {"model_id": model_id, "subfolder": "hunyuan3d-dit-v2-mv" if multiview else "hunyuan3d-dit-v2-0", "steps": manifest.inference_steps if manifest.profile == "CUSTOM" else 50, "octree_resolution": manifest.octree_resolution if manifest.profile == "CUSTOM" else 384, "num_chunks": manifest.geometry_num_chunks if manifest.profile == "CUSTOM" else 20000, "seed": 42, "low_vram_mode": manifest.low_vram_mode if manifest.profile == "CUSTOM" else manifest.profile.upper() != "MAX"}
             request = {"images": processed, "output_dir": str(output_dir), "settings": settings}
             logger.info("Starting official Hunyuan worker %s with %s views", model_id, len(processed))
             monitor = VramMonitor()
@@ -331,8 +331,8 @@ class PipelineRunner:
             # 1024 is the useful texture threshold on the target RTX 4070.  The
             # official low-VRAM path still peaks around 8.3 GB, so BALANCED can
             # use it without paying the quality cost of the old 512 atlas.
-            "texture_resolution": 512 if profile == "SAFE" else 1024,
-            "low_vram_mode": profile != "MAX",
+            "texture_resolution": manifest.texture_resolution if profile == "CUSTOM" else (512 if profile == "SAFE" else 1024),
+            "low_vram_mode": manifest.low_vram_mode if profile == "CUSTOM" else profile != "MAX",
             "remesh": "none",
         }
         retry_history: list[dict] = []
@@ -395,7 +395,7 @@ class PipelineRunner:
             if not front or not front.processed_path:
                 raise RuntimeError("FRONT reference is required for Hunyuan Paint")
             textured_mesh = job_dir / "textures" / "hunyuan-paint" / "textured.glb"
-            texture_request = {"mesh_path": str(mesh_path), "image": str(job_dir / front.processed_path), "output_mesh": str(textured_mesh), "model_id": hunyuan["model_id"], "texture_resolution": 1024, "low_vram_mode": manifest.profile.upper() != "MAX"}
+            texture_request = {"mesh_path": str(mesh_path), "image": str(job_dir / front.processed_path), "output_mesh": str(textured_mesh), "model_id": hunyuan["model_id"], "texture_resolution": manifest.texture_resolution if manifest.profile == "CUSTOM" else (512 if manifest.profile.upper() == "SAFE" else 1024), "low_vram_mode": manifest.low_vram_mode if manifest.profile == "CUSTOM" else manifest.profile.upper() != "MAX"}
             logger.info("Starting official Hunyuan Paint worker")
             result = await asyncio.to_thread(
                 self.process_manager.run_json_worker,

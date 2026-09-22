@@ -21,7 +21,7 @@ from .model_registry import ModelRegistry
 from .motion_library import MotionLibrary, MotionLibraryError
 from .pipeline_graph import STAGE_DEPENDENCIES
 from .runner import PipelineRunner, SingleGpuQueue
-from .schemas import AnimationGraphRequest, CacheCleanRequest, CacheCleanResult, CacheInventory, ClothingSelectionRequest, EquipmentRegisterRequest, EquipmentSelectionRequest, ExportSelectionRequest, JobCreateRequest, JobManifest, MotionRegisterRequest, MotionSelectionRequest, ReferenceSlot, RetopologySettingsRequest, Settings, StageName
+from .schemas import AnimationGraphRequest, CacheCleanRequest, CacheCleanResult, CacheInventory, ClothingSelectionRequest, EquipmentRegisterRequest, EquipmentSelectionRequest, ExportSelectionRequest, JobCreateRequest, JobManifest, JobSettingsRequest, MotionRegisterRequest, MotionSelectionRequest, ReferenceSlot, RetopologySettingsRequest, Settings, StageName
 from .storage import atomic_write_json, read_json
 from .schemas import StageStatus
 
@@ -135,6 +135,45 @@ def set_retopology_settings(job_id: str, request: RetopologySettingsRequest) -> 
     record.result = {}
     record.error_category = "UPSTREAM_CHANGED"
     record.error_message = "Retopology settings changed; rebuild the selected topology"
+    store.save(manifest)
+    return manifest
+
+
+@app.put("/api/jobs/{job_id}/settings", response_model=JobManifest)
+def set_job_settings(job_id: str, request: JobSettingsRequest) -> JobManifest:
+    manifest = get_job(job_id)
+    if any(record.status is StageStatus.RUNNING for record in manifest.stages.values()):
+        raise HTTPException(status_code=409, detail="Cancel the running stage before changing job settings")
+    resolution_changed = manifest.resolution != request.resolution
+    geometry_changed = any([
+        manifest.profile != request.profile,
+        manifest.requested_provider != request.requested_provider,
+        manifest.inference_steps != request.inference_steps,
+        manifest.octree_resolution != request.octree_resolution,
+        manifest.geometry_num_chunks != request.geometry_num_chunks,
+        manifest.low_vram_mode != request.low_vram_mode,
+    ])
+    texture_changed = manifest.texture_resolution != request.texture_resolution
+    manifest.profile = request.profile
+    manifest.resolution = request.resolution
+    manifest.requested_provider = request.requested_provider
+    manifest.inference_steps = request.inference_steps
+    manifest.octree_resolution = request.octree_resolution
+    manifest.geometry_num_chunks = request.geometry_num_chunks
+    manifest.low_vram_mode = request.low_vram_mode
+    manifest.texture_resolution = request.texture_resolution
+    start_stage = StageName.REFERENCES if resolution_changed else StageName.GEOMETRY if geometry_changed else StageName.TEXTURES if texture_changed else None
+    if start_stage is not None:
+        store.invalidate_from(manifest, start_stage)
+        record = manifest.stages[start_stage.value]
+        record.status = StageStatus.INVALIDATED
+        record.result = {}
+        record.error_category = "SETTINGS_CHANGED"
+        record.error_message = f"Settings changed; rerun {start_stage.value}"
+        if start_stage in {StageName.REFERENCES, StageName.GEOMETRY}:
+            manifest.actual_provider = None
+            manifest.fallback_reason = None
+        manifest.status = "INVALIDATED"
     store.save(manifest)
     return manifest
 

@@ -14,7 +14,7 @@ from PIL import ImageDraw
 
 from app import main
 from app.job_store import JobStore
-from app.schemas import JobCreateRequest, ReferenceSlot, RetopologySettingsRequest, StageStatus
+from app.schemas import JobCreateRequest, JobSettingsRequest, ReferenceSlot, RetopologySettingsRequest, StageStatus
 from app.reference_pipeline import assess_reference
 
 
@@ -106,6 +106,39 @@ class ReferenceUploadTests(unittest.TestCase):
             self.assertEqual(updated.retopology_target_faces, 24000)
             self.assertEqual(updated.stages["retopology"].status, StageStatus.INVALIDATED)
             self.assertEqual(updated.stages["rig"].status, StageStatus.INVALIDATED)
+
+    def test_quality_settings_invalidate_only_the_affected_pipeline_prefix(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = JobStore(Path(directory))
+            job = store.create(JobCreateRequest())
+            for record in job.stages.values():
+                record.status = StageStatus.READY
+            store.save(job)
+            with patch.object(main, "store", store):
+                updated = main.set_job_settings(job.job_id, JobSettingsRequest(texture_resolution=512))
+            self.assertEqual(updated.texture_resolution, 512)
+            self.assertEqual(updated.stages["references"].status, StageStatus.READY)
+            self.assertEqual(updated.stages["geometry"].status, StageStatus.READY)
+            self.assertEqual(updated.stages["textures"].status, StageStatus.INVALIDATED)
+            self.assertEqual(updated.stages["rig"].status, StageStatus.INVALIDATED)
+
+            with patch.object(main, "store", store):
+                updated = main.set_job_settings(job.job_id, JobSettingsRequest(profile="MAX", resolution=768))
+            self.assertEqual(updated.profile, "MAX")
+            self.assertEqual(updated.resolution, 768)
+            self.assertEqual(updated.stages["references"].status, StageStatus.INVALIDATED)
+            self.assertEqual(updated.stages["geometry"].status, StageStatus.INVALIDATED)
+
+    def test_quality_settings_reject_changes_during_running_stage(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = JobStore(Path(directory))
+            job = store.create(JobCreateRequest())
+            job.stages["geometry"].status = StageStatus.RUNNING
+            store.save(job)
+            with patch.object(main, "store", store):
+                with self.assertRaises(HTTPException) as error:
+                    main.set_job_settings(job.job_id, JobSettingsRequest(profile="MAX"))
+            self.assertEqual(error.exception.status_code, 409)
 
 
 if __name__ == "__main__":

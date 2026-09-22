@@ -42,6 +42,10 @@ class StageRecord(BaseModel):
     result: dict[str, Any] = Field(default_factory=dict)
 
 
+QualityProfile = Literal["SAFE", "BALANCED", "MAX", "CUSTOM"]
+ProviderName = Literal["AUTO", "Spar3DProvider", "HunyuanMultiviewProvider", "HunyuanSingleViewProvider"]
+
+
 class ReferenceSlot(BaseModel):
     view: str
     required: bool = False
@@ -55,9 +59,9 @@ class JobManifest(BaseModel):
     created_at: datetime
     updated_at: datetime
     status: str = "CREATED"
-    profile: str = "BALANCED"
+    profile: QualityProfile = "BALANCED"
     resolution: int = 512
-    requested_provider: str = "AUTO"
+    requested_provider: ProviderName = "AUTO"
     actual_provider: str | None = None
     fallback_reason: str | None = None
     references: dict[str, ReferenceSlot] = Field(default_factory=dict)
@@ -69,14 +73,30 @@ class JobManifest(BaseModel):
     export_actions: list[str] = Field(default_factory=list)
     retopology_mode: Literal["KEEP_SOURCE", "TRIANGLE", "QUAD"] = "TRIANGLE"
     retopology_target_faces: int = Field(default=30000, ge=5000, le=80000)
+    inference_steps: int = Field(default=50, ge=20, le=100)
+    octree_resolution: int = Field(default=384, ge=256, le=512)
+    geometry_num_chunks: int = Field(default=20000, ge=5000, le=50000)
+    low_vram_mode: bool = True
+    texture_resolution: Literal[512, 1024] = 1024
     warnings: list[str] = Field(default_factory=list)
 
 
 class JobCreateRequest(BaseModel):
     name: str = "Character Unit"
-    profile: str = "BALANCED"
+    profile: QualityProfile = "BALANCED"
     resolution: Literal[384, 512, 640, 768] = 512
-    requested_provider: str = "AUTO"
+    requested_provider: ProviderName = "AUTO"
+
+
+class JobSettingsRequest(BaseModel):
+    profile: QualityProfile = "BALANCED"
+    resolution: Literal[384, 512, 640, 768] = 512
+    requested_provider: ProviderName = "AUTO"
+    inference_steps: int = Field(default=50, ge=20, le=100)
+    octree_resolution: int = Field(default=384, ge=256, le=512)
+    geometry_num_chunks: int = Field(default=20000, ge=5000, le=50000)
+    low_vram_mode: bool = True
+    texture_resolution: Literal[512, 1024] = 1024
 
 
 class Settings(BaseModel):
