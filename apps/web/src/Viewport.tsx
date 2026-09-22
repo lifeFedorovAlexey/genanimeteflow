@@ -38,16 +38,31 @@ function AnimatedAsset({ url, selectedClip, upperBodyAction, graphClip, graphBle
   const asset = useGLTF(url);
   const { actions, mixer } = useAnimations(asset.animations, root);
   const actionNames = useMemo(() => asset.animations.map(animation => animation.name).filter(Boolean), [asset.animations]);
-  const upperActions = useMemo(() => {
-    const masked: Record<string, THREE.AnimationAction> = {};
+  const upperActions = useRef<Record<string, THREE.AnimationAction>>({});
+  const upperClips = useMemo(() => {
+    const masked: Record<string, THREE.AnimationClip> = {};
     asset.animations.forEach(animation => {
       const tracks = animation.tracks.filter(isUpperBodyTrack);
       if (tracks.length === 0) return;
-      const maskedClip = new THREE.AnimationClip(`${animation.name}__upper_body`, animation.duration, tracks);
-      masked[animation.name] = mixer.clipAction(maskedClip);
+      masked[animation.name] = new THREE.AnimationClip(`${animation.name}__upper_body`, animation.duration, tracks);
     });
     return masked;
-  }, [asset.animations, mixer]);
+  }, [asset.animations]);
+  useEffect(() => {
+    const sceneRoot = root.current ?? asset.scene;
+    const actionsForClips: Record<string, THREE.AnimationAction> = {};
+    Object.entries(upperClips).forEach(([name, clip]) => {
+      actionsForClips[name] = mixer.clipAction(clip, sceneRoot);
+    });
+    upperActions.current = actionsForClips;
+    return () => {
+      Object.values(actionsForClips).forEach(action => {
+        action.stop();
+        mixer.uncacheAction(action.getClip(), sceneRoot);
+      });
+      upperActions.current = {};
+    };
+  }, [asset.scene, mixer, upperClips]);
   const skeletonHelper = useMemo(() => new THREE.SkeletonHelper(asset.scene), [asset.scene]);
 
   useEffect(() => { onActions(actionNames); }, [actionNames, onActions]);
@@ -108,8 +123,8 @@ function AnimatedAsset({ url, selectedClip, upperBodyAction, graphClip, graphBle
       activeClip.current = blendKey;
     }
     if (upperClip !== activeUpperClip.current) {
-      if (activeUpperClip.current) upperActions[activeUpperClip.current]?.fadeOut(0.12);
-      if (upperClip) upperActions[upperClip]?.reset().fadeIn(0.12).setEffectiveWeight(1).play();
+      if (activeUpperClip.current) upperActions.current[activeUpperClip.current]?.fadeOut(0.12);
+      if (upperClip) upperActions.current[upperClip]?.reset().fadeIn(0.12).setEffectiveWeight(1).play();
       activeUpperClip.current = upperClip;
     }
     mixer.update(delta * selected.speed);
