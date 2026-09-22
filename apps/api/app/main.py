@@ -29,7 +29,17 @@ store.recover_incomplete()
 runner = PipelineRunner(store, SingleGpuQueue())
 
 app = FastAPI(title="Character Factory API", version="0.1.0")
-app.add_middleware(CORSMiddleware, allow_origins=["http://127.0.0.1:5173", "http://localhost:5173"], allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://127.0.0.1:5173",
+        "http://localhost:5173",
+        "http://127.0.0.1:5176",
+        "http://localhost:5176",
+    ],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/api/health")
