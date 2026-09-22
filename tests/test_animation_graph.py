@@ -9,6 +9,8 @@ CLIPS = [
     MotionClip("idle", "Idle", "idle", 1.0, True),
     MotionClip("walk", "Walk", "walk", 1.0, True),
     MotionClip("rifle_walk", "Rifle Walk", "walk", 1.0, True, "rifle"),
+    MotionClip("rifle_aim", "Rifle Aim", "rifle_aim", 1.0, True, "rifle"),
+    MotionClip("rifle_recoil", "Rifle Recoil", "walk", 0.2, False, "rifle", additive=True),
     MotionClip("sword_attack", "Sword Attack", "attack", 1.0, False, "sword"),
 ]
 
@@ -35,6 +37,19 @@ class AnimationGraphTests(unittest.TestCase):
         self.assertEqual(output.transition, "idle->walk")
         self.assertEqual(output.root_motion_mode, "in_place")
         self.assertEqual(output.layers[0]["mask"], "full_body")
+
+    def test_upper_body_layer_uses_equipment_clip_and_mask(self) -> None:
+        output = AnimationGraph(CLIPS).evaluate(AnimationInput(speed=1.0, equipment_type="rifle", upper_body_action="Rifle Aim"))
+        upper = next(layer for layer in output.layers if layer["name"] == "upper_body")
+        self.assertEqual(upper["clip_id"], "rifle_aim")
+        self.assertEqual(upper["mask"], "spine_to_hands")
+
+    def test_additive_layer_is_only_emitted_when_source_clip_is_available(self) -> None:
+        output = AnimationGraph(CLIPS).evaluate(AnimationInput(speed=1.0, equipment_type="rifle"))
+        additive = next(layer for layer in output.layers if layer["name"] == "additive")
+        self.assertEqual(additive["clip_id"], "rifle_recoil")
+        self.assertEqual(additive["mask"], "upper_body")
+        self.assertEqual(output.additive_clip_id, "rifle_recoil")
 
     def test_directional_clip_is_selected_by_angle(self) -> None:
         clips = [MotionClip("left", "Walk Left", "walk", 1.0, True, direction_degrees=270.0), MotionClip("right", "Walk Right", "walk", 1.0, True, direction_degrees=90.0)]
