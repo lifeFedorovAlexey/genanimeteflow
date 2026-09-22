@@ -185,6 +185,25 @@ as success. This is evidence that downstream validation is active, not a full
 acceptance result; the final run still requires four consistent humanoid
 T-pose views.
 
+## Multiview rig recovery and full downstream rerun
+
+The failure above exposed a mapping assumption rather than a missing model:
+this prediction placed the two shoulders one torso link lower, omitted an
+explicit `Spine2`, and emitted three-link feet without `ToeBase`. The Blender
+exporter now locates shoulders by the symmetric lateral branches above Hips,
+inserts zero-weight canonical `Spine2`/`ToeBase` links only when absent, and
+builds those virtual links in the mesh-aligned UniRig coordinate space. A real
+Blender export of the f946 prediction passed strict rig validation with `35`
+joint nodes, `98,951` influenced vertices and all canonical mappings.
+
+The production API job was rerun end to end after the fix. Clothing, both CC0
+weapons (Fantasy Sword and Lightning Pump Action Rifle), four IK targets,
+ten normalized actions and GLB/FBX/manifest round-trip export all completed;
+the final GLB contains `102,252` vertices, `7` embedded textures, `35` bones
+and `10` animations. The strict full gate is now `28/30`: only the missing
+user-supplied RIGHT reference and the corresponding four-view multiview gate
+remain. No copied or mirrored view is counted as acceptance evidence.
+
 Pixal3D's seven single-view checkpoint files total about 24.05 GB decimal,
 excluding auxiliary models, dependencies and build space. Whole-repository weight
 downloads would also fetch separate multiview checkpoints. Enumerate selected

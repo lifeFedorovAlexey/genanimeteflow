@@ -22,7 +22,7 @@ def _load_prediction(path: Path) -> dict[str, object]:
     return {name: data[name][()] for name in data}
 
 
-def _canonicalize_humanoid(data: dict[str, object]) -> list[str]:
+def _canonicalize_humanoid(data: dict[str, object]) -> dict[str, object]:
     """Name UniRig's ordered generic bones using its humanoid topology.
 
     UniRig intentionally supports arbitrary creatures and therefore may emit
@@ -75,14 +75,29 @@ def _canonicalize_humanoid(data: dict[str, object]) -> list[str]:
         current = child
         if len(trunk) > 8:
             break
-    trunk_names = ["Spine", "Spine1", "Spine2", "Neck", "Head"]
+    trunk_names = ["Spine", "Spine1", "Spine2", "Neck", "Head"] if len(trunk) >= 6 else ["Spine", "Spine1", "Neck", "Head"]
     for index, name in zip(trunk[1:], trunk_names):
         assign(index, name)
     if len(trunk) < 4:
         raise ValueError("Humanoid canonical mapping could not identify a torso chain")
-    chest = trunk[min(3, len(trunk) - 1)]
+    # Stylized characters do not always expose shoulders at the same torso
+    # depth.  Find the torso node with one clearly left and one clearly right
+    # lateral branch instead of assuming ``trunk[3]`` is always the chest.
+    def arm_children(index: int) -> list[int]:
+        return [
+            child for child in children[index]
+            if child not in assigned and abs(float(joints[child, 0])) > 0.015
+        ]
 
-    arm_roots = [child for child in children[chest] if child not in assigned and abs(float(joints[child, 0])) > 0.04]
+    chest = next(
+        (index for index in reversed(trunk) if index != root and len([child for child in arm_children(index) if joints[child, 0] < 0]) == 1
+         and len([child for child in arm_children(index) if joints[child, 0] > 0]) == 1),
+        None,
+    )
+    if chest is None:
+        raise ValueError("Humanoid canonical mapping could not identify a symmetric shoulder branch")
+
+    arm_roots = arm_children(chest)
     if len(arm_roots) != 2:
         raise ValueError(f"Humanoid canonical mapping expects two arm roots, got {len(arm_roots)}")
     finger_labels = ["Index", "Middle", "Ring", "Pinky", "Thumb"]
@@ -131,12 +146,42 @@ def _canonicalize_humanoid(data: dict[str, object]) -> list[str]:
             chain.append(current)
         for index, name in zip(chain, [f"{side}UpLeg", f"{side}Leg", f"{side}Foot", f"{side}ToeBase"]):
             assign(index, name)
+        if len(chain) < 4:
+            # Compact or stylized feet are often predicted without an explicit
+            # toe link.  Add a zero-weight continuation so the canonical
+            # retarget contract remains complete without inventing influences.
+            parent_index = chain[-1]
+            direction = tails[parent_index] - joints[parent_index]
+            length = float(np.linalg.norm(direction))
+            if length < 1e-5:
+                direction = np.array([0.0, 0.0, 0.05], dtype=np.float32)
+            else:
+                direction = direction / length * max(length * 0.5, 0.02)
+            joints = np.vstack([joints, tails[parent_index]])
+            tails = np.vstack([tails, tails[parent_index] + direction])
+            parents.append(parent_index)
+            names.append(f"mixamorig:{side}ToeBase")
+
+    # Some stylized predictions contain only four links after Hips.  Preserve
+    # their useful torso chain and insert a virtual Spine2 between Spine1 and
+    # Neck so downstream retargeting still receives the canonical contract.
+    if "mixamorig:Spine2" not in names and len(trunk) == 5:
+        parent_index = trunk[2]
+        child_index = trunk[3]
+        virtual_index = len(names)
+        virtual_joint = (joints[parent_index] + joints[child_index]) * 0.5
+        virtual_tail = joints[child_index].copy()
+        parents[child_index] = virtual_index
+        joints = np.vstack([joints, virtual_joint])
+        tails = np.vstack([tails, virtual_tail])
+        parents.append(parent_index)
+        names.append("mixamorig:Spine2")
 
     required = {"mixamorig:Hips", "mixamorig:Spine", "mixamorig:Spine1", "mixamorig:Spine2", "mixamorig:Neck", "mixamorig:Head", "mixamorig:RightArm", "mixamorig:LeftArm", "mixamorig:RightUpLeg", "mixamorig:LeftUpLeg"}
     missing = sorted(required - set(names))
     if missing:
         raise ValueError("Humanoid canonical mapping is incomplete: " + ", ".join(missing))
-    return names
+    return {"joints": joints, "tails": tails, "parents": parents, "names": names, "original_count": count}
 
 
 def _import_mesh(path: Path) -> list[object]:
@@ -297,12 +342,23 @@ def main() -> None:
             raise FileNotFoundError(f"Expected UniRig skin prediction next to skeleton: {skin_path}")
         skin = _load_prediction(skin_path)
         sampled, bones, weights = _align_prediction_to_mesh(meshes, data, skin)
-        rig_data = {"joints": bones[:, :3], "tails": bones[:, 3:], "parents": data["parents"], "names": _canonicalize_humanoid(data)}
+        canonical = _canonicalize_humanoid({
+            "joints": bones[:, :3],
+            "tails": bones[:, 3:],
+            "parents": data["parents"],
+            "names": data["names"],
+        })
+        rig_data = {
+            "joints": canonical["joints"],
+            "tails": canonical["tails"],
+            "parents": canonical["parents"],
+            "names": canonical["names"],
+        }
         armature = _add_armature(rig_data, add_canonical_root=True)
     else:
         armature = _add_armature(data)
     if args.mode == "rigged":
-        _apply_skin(meshes, armature, [str(name) for name in data["names"]], weights, sampled)
+        _apply_skin(meshes, armature, [str(name) for name in canonical["names"][: int(canonical["original_count"])]], weights, sampled)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     bpy.ops.object.select_all(action="SELECT")
     if args.output.suffix.lower() == ".fbx":
