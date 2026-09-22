@@ -32,6 +32,7 @@ Each checked item must have working code, automated coverage where practical, a 
 - [x] Implement licensed motion library installation, normalization and catalog validation (UAL2 Standard CC0 fixture: 43 clips, real local install and catalog scan)
 - [x] Add real Blender canonical-bone retarget worker with bake and GLB roundtrip validation (runtime requires Blender and installed source clips)
 - [x] Connect installed motion clips to job selection, catalog validation and the motions stage
+- [x] Seed new units with a real canonical motion set from the installed licensed library (user can remove selections)
 - [x] Connect graph evaluation endpoint to normalized Blender actions and Unit Tester state changes (upper-body bone-mask playback and source-gated additive contract are implemented; full acceptance clips remain)
 - [ ] Implement retargeting and the canonical animation graph (canonical retarget worker is real and smoke-tested; full graph blending, locomotion transitions and acceptance clips remain)
 - [x] Implement equipment, clothing, sockets and IK validation (real acceptance run: Utility Vest + CC0 Lightning Rifle, one socket, four IK targets/constraints)

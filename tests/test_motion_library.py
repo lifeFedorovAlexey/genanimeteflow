@@ -21,6 +21,34 @@ def animated_glb() -> bytes:
 
 
 class MotionLibraryTests(unittest.TestCase):
+    def test_recommended_clips_choose_real_canonical_roles(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            catalog = {
+                "schema_version": 1,
+                "libraries": [{
+                    "id": "fixture",
+                    "license": "CC0",
+                    "allowed_for_commercial_use": True,
+                    "clips": [
+                        {"id": "idle", "name": "Idle_Loop"},
+                        {"id": "walk", "name": "Walk_Loop"},
+                        {"id": "sprint", "name": "Sprint_Loop"},
+                        {"id": "jump-start", "name": "Jump_Start"},
+                        {"id": "jump-air", "name": "Jump_Loop"},
+                        {"id": "jump-land", "name": "Jump_Land"},
+                        {"id": "attack", "name": "Melee_Hook"},
+                        {"id": "hit", "name": "Hit_Knockback"},
+                        {"id": "death", "name": "Death01"},
+                    ],
+                }],
+                "sources": [],
+            }
+            catalog_path = root / "catalog.json"
+            catalog_path.write_text(json.dumps(catalog), encoding="utf-8")
+            library = MotionLibrary(catalog_path, root / "installed")
+            self.assertEqual(library.recommended_clips(), ["idle", "walk", "sprint", "jump-start", "jump-air", "jump-land", "attack", "hit", "death"])
+
     def test_registers_local_glb_with_checksum_and_clip_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

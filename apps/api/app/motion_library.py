@@ -17,6 +17,19 @@ class MotionLibraryError(RuntimeError):
 
 
 class MotionLibrary:
+    RECOMMENDED_PATTERNS: tuple[tuple[str, ...], ...] = (
+        ("idle_loop", "idle_no_loop"),
+        ("walk_loop", "walk_fwd_loop", "walk_formal_loop"),
+        ("run_loop", "jog_loop", "sprint_loop"),
+        ("crouch_fwd_loop", "crouch_loop", "slide_loop"),
+        ("jump_start",),
+        ("jump_loop", "jump_air"),
+        ("jump_land",),
+        ("melee_hook", "sword_attack", "punch_jab", "attack"),
+        ("hit_knockback", "hit"),
+        ("death01", "death", "die"),
+    )
+
     def __init__(self, catalog_path: Path | None = None, install_root: Path | None = None) -> None:
         self.catalog_path = catalog_path or REPO_ROOT / "motions" / "motion_catalog.json"
         self.install_root = install_root or REPO_ROOT / "motions" / "installed"
@@ -42,6 +55,25 @@ class MotionLibrary:
         if missing:
             raise MotionLibraryError("Unknown motion clip IDs: " + ", ".join(missing))
         return [available[clip_id] for clip_id in clip_ids]
+
+    def recommended_clips(self) -> list[str]:
+        """Return one real installed clip for each canonical playable role."""
+        available = self.clips()
+        selected: list[str] = []
+        for patterns in self.RECOMMENDED_PATTERNS:
+            candidate = next(
+                (
+                    clip_id
+                    for pattern in patterns
+                    for clip_id, clip in available.items()
+                    if str(clip.get("name", "")).lower().replace("-", "_").replace(" ", "_") == pattern
+                    and clip_id not in selected
+                ),
+                None,
+            )
+            if candidate:
+                selected.append(candidate)
+        return selected
 
     def register_local(self, source_path: Path, library_id: str, source_id: str, license_text: str, allowed_for_commercial_use: bool) -> dict[str, Any]:
         source_path = source_path.expanduser().resolve()

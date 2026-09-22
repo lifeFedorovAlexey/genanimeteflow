@@ -68,7 +68,7 @@ def get_models() -> list[dict]:
 def get_motions() -> dict:
     library = MotionLibrary()
     catalog = library.catalog()
-    return {**catalog, "available_clips": list(library.clips().values())}
+    return {**catalog, "available_clips": list(library.clips().values()), "recommended_clips": library.recommended_clips()}
 
 
 @app.get("/api/equipment")
@@ -215,7 +215,12 @@ def list_jobs() -> list[JobManifest]:
 
 @app.post("/api/jobs", response_model=JobManifest, status_code=201)
 def create_job(request: JobCreateRequest) -> JobManifest:
-    return store.create(request)
+    manifest = store.create(request)
+    recommended = MotionLibrary().recommended_clips()
+    if recommended:
+        manifest.motion_clips = recommended
+        store.save(manifest)
+    return manifest
 
 
 @app.get("/api/jobs/{job_id}", response_model=JobManifest)
