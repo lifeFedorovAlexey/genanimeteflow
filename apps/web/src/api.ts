@@ -16,6 +16,7 @@ export const api = {
   createJob: (body: { name: string; profile: string; resolution: number; requested_provider: string }) => request<Job>("/api/jobs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   upload: (jobId: string, view: ViewName, file: File) => { const form = new FormData(); form.append("file", file); return request<Job>(`/api/jobs/${jobId}/references/${view}`, { method: "POST", body: form }); },
   runStage: (jobId: string, stage: string) => request<{ status: string }>(`/api/jobs/${jobId}/stages/${stage}/run`, { method: "POST" }),
+  cancelStage: (jobId: string, stage: string) => request<{ cancelled: boolean }>(`/api/jobs/${jobId}/stages/${stage}/cancel`, { method: "POST" }),
   setExportSelection: (jobId: string, actions: string[]) => request<Job>(`/api/jobs/${jobId}/export-selection`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ actions }) }),
   setMotionSelection: (jobId: string, clips: string[]) => request<Job>(`/api/jobs/${jobId}/motion-selection`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clips }) }),
   setEquipmentSelection: (jobId: string, assets: string[]) => request<Job>(`/api/jobs/${jobId}/equipment-selection`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ assets }) }),
