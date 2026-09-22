@@ -37,7 +37,7 @@ export default function QualityControls({ job, busy, onSave }: Props) {
     <div className="quality-fields">
       <label>Профиль<select value={profile} onChange={event => setProfile(event.target.value as Job["profile"])}><option value="SAFE">SAFE · меньше VRAM</option><option value="BALANCED">BALANCED · рекомендуется</option><option value="MAX">MAX · больше время/VRAM</option><option value="CUSTOM">CUSTOM · вручную</option></select></label>
       <label>Размер входа<input type="number" min={384} max={1536} step={64} value={resolution} onChange={event => setResolution(event.target.value)} /></label>
-      <label>Provider<select value={provider} onChange={event => setProvider(event.target.value as NonNullable<Job["requested_provider"]>)}><option value="AUTO">AUTO</option><option value="Spar3DProvider">SPAR3D · FRONT</option><option value="HunyuanMultiviewProvider">Hunyuan · multiview</option><option value="HunyuanSingleViewProvider">Hunyuan · single view</option></select></label>
+      <label>Provider<select value={provider} onChange={event => setProvider(event.target.value as NonNullable<Job["requested_provider"]>)}><option value="AUTO">AUTO · лучшее доступное</option><option value="HunyuanMultiviewProvider">Hunyuan · 2–4 ракурса</option><option value="HunyuanSingleViewProvider">Hunyuan · один ракурс</option></select></label>
       {profile === "CUSTOM" && <>
         <label>Шаги inference<input type="number" min={20} max={100} step={5} value={steps} onChange={event => setSteps(event.target.value)} /></label>
         <label>Octree<input type="number" min={256} max={512} step={32} value={octree} onChange={event => setOctree(event.target.value)} /></label>

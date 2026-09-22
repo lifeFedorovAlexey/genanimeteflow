@@ -2,17 +2,6 @@
   "schema_version": 1,
   "models": [
     {
-      "id": "spar3d",
-      "provider": "Spar3DProvider",
-      "repository": "https://github.com/Stability-AI/stable-point-aware-3d",
-      "model_id": "stabilityai/stable-point-aware-3d",
-      "license": "Stability AI model license; review upstream terms before use",
-      "worker_root_env": "SPAR3D_ROOT",
-      "python_env": "SPAR3D_PYTHON",
-      "expected_vram_gb": { "default": 10.5, "low_vram": 7.0 },
-      "official_options": { "low_vram": "--low-vram-mode", "texture_resolution": "--texture-resolution", "remesh": "--remesh_option", "target_count": "--target_count" }
-    },
-    {
       "id": "hunyuan3d-2mv",
       "provider": "HunyuanMultiviewProvider",
       "repository": "https://github.com/Tencent-Hunyuan/Hunyuan3D-2",

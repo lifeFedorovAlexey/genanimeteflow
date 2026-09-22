@@ -15,18 +15,13 @@ from app.runner import choose_geometry_provider
 
 
 class HunyuanWorkerTests(unittest.TestCase):
-    def test_auto_prefers_spar3d_for_single_front_when_available(self) -> None:
-        provider, fallback = choose_geometry_provider("AUTO", 1, multiview_ready=True, single_view_ready=True, spar3d_ready=True)
-        self.assertEqual(provider, "spar3d")
+    def test_auto_prefers_hunyuan_single_for_single_front_when_available(self) -> None:
+        provider, fallback = choose_geometry_provider("AUTO", 1, multiview_ready=True, single_view_ready=True)
+        self.assertEqual(provider, "hunyuan-single")
         self.assertIsNone(fallback)
 
-    def test_auto_records_real_single_view_fallback_reason(self) -> None:
-        provider, fallback = choose_geometry_provider("AUTO", 1, multiview_ready=True, single_view_ready=True, spar3d_ready=False)
-        self.assertEqual(provider, "hunyuan-single")
-        self.assertIn("SPAR3D", fallback or "")
-
     def test_auto_does_not_feed_multiple_views_to_single_view_provider(self) -> None:
-        provider, fallback = choose_geometry_provider("AUTO", 4, multiview_ready=False, single_view_ready=True, spar3d_ready=False)
+        provider, fallback = choose_geometry_provider("AUTO", 4, multiview_ready=False, single_view_ready=True)
         self.assertEqual(provider, "unavailable")
         self.assertIn("single-view", fallback or "")
 

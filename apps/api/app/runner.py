@@ -33,7 +33,6 @@ def choose_geometry_provider(
     *,
     multiview_ready: bool,
     single_view_ready: bool,
-    spar3d_ready: bool,
 ) -> tuple[str, str | None]:
     """Select a real provider and explain every automatic downgrade."""
     if requested == "HunyuanMultiviewProvider":
@@ -41,19 +40,16 @@ def choose_geometry_provider(
     if requested == "HunyuanSingleViewProvider":
         return "hunyuan-single", None
     if requested == "Spar3DProvider":
-        return "spar3d", None
+        return "unavailable", "SPAR3D удалён из Character Factory; выберите Hunyuan или AUTO."
     if requested != "AUTO":
         raise ValueError(f"Unsupported geometry provider: {requested}")
     if view_count >= 2 and multiview_ready:
         return "hunyuan-multiview", None
-    if view_count == 1 and spar3d_ready:
-        return "spar3d", None
-    if view_count >= 2 and spar3d_ready:
-        return "spar3d", "Hunyuan3D-2mv недоступен; SPAR3D использует только FRONT, дополнительные ракурсы не были поданы в inference."
+    # Hunyuan shape + Hunyuan Paint is the quality route for a single FRONT.
     if view_count == 1 and single_view_ready:
-        return "hunyuan-single", "SPAR3D недоступен; использован реальный Hunyuan3D single-view fallback."
+        return "hunyuan-single", None
     if view_count >= 2 and single_view_ready:
-        return "unavailable", "Для нескольких ракурсов нужен Hunyuan3D-2mv или SPAR3D; Hunyuan single-view не принимает этот набор входов."
+        return "unavailable", "Для нескольких ракурсов нужен Hunyuan3D-2mv; Hunyuan single-view не принимает этот набор входов."
     return "unavailable", "Ни один совместимый geometry provider не установлен для текущего набора ракурсов."
 
 
@@ -306,13 +302,11 @@ class PipelineRunner:
         requested = manifest.requested_provider
         hunyuan = models.get("hunyuan3d-2mv", {"installed": False, "reason": "Hunyuan3D-2mv is not configured"})
         hunyuan_single = models.get("hunyuan3d-2", {"installed": False, "reason": "Hunyuan3D-2 single-view is not configured"})
-        spar3d = models.get("spar3d", {"installed": False, "reason": "SPAR3D is not configured"})
         selected_provider, fallback_reason = choose_geometry_provider(
             requested,
             len(processed),
             multiview_ready=bool(hunyuan["installed"]),
             single_view_ready=bool(hunyuan_single["installed"]),
-            spar3d_ready=bool(spar3d["installed"]),
         )
         manifest.fallback_reason = fallback_reason
         if selected_provider == "unavailable":
@@ -367,58 +361,7 @@ class PipelineRunner:
             manifest.stages[StageName.GEOMETRY.value].result = {"mesh_path": str(mesh_path.relative_to(job_dir)), "settings": settings, "vram": vram, "provider_views": sorted(processed), "stdout": result.stdout[-4000:], "validation": report.__dict__}
             logger.info("Generated Hunyuan mesh saved: %s", mesh_path)
             return
-        if not spar3d["installed"]:
-            raise WorkerFailure("MODEL_MISSING", str(spar3d["reason"]))
-        job_dir = self.store.job_dir(manifest.job_id)
-        output_dir = job_dir / "geometry" / "spar3d"
-        profile = manifest.profile.upper()
-        settings = {
-            # 1024 is the useful texture threshold on the target RTX 4070.  The
-            # official low-VRAM path still peaks around 8.3 GB, so BALANCED can
-            # use it without paying the quality cost of the old 512 atlas.
-            "texture_resolution": manifest.texture_resolution if profile == "CUSTOM" else (512 if profile == "SAFE" else 1024),
-            "low_vram_mode": manifest.low_vram_mode if profile == "CUSTOM" else profile != "MAX",
-            "remesh": "none",
-        }
-        retry_history: list[dict] = []
-        result = None
-        vram_metrics: dict = {}
-        for attempt in range(3):
-            attempt_log = log_path.with_name(f"geometry_attempt_{attempt + 1}.log")
-            request = {"image": str(job_dir / front.processed_path), "output_dir": str(output_dir / f"attempt_{attempt + 1}"), "settings": settings}
-            logger.info("Starting official SPAR3D worker, attempt %s, settings=%s", attempt + 1, settings)
-            monitor = VramMonitor()
-            before = monitor.snapshot()
-            monitor.start()
-            try:
-                result = await asyncio.to_thread(self.process_manager.run_json_worker, [sys.executable, "-m", "workers.spar3d.worker"], request, REPO_ROOT, {"SPAR3D_ROOT": str(spar3d["root"]), **({"SPAR3D_PYTHON": spar3d["python"]} if spar3d["python"] else {})}, attempt_log, process_key=f"{manifest.job_id}:{StageName.GEOMETRY.value}")
-            except WorkerFailure as error:
-                metrics = monitor.stop()
-                metrics["before"] = before or metrics.get("before")
-                retry_history.append({"attempt": attempt + 1, "settings": settings.copy(), "category": error.category, "message": str(error), "vram": metrics})
-                if error.category != "FAILED_OOM" or attempt >= 2:
-                    raise WorkerFailure(error.category, f"{error}; retry_history={retry_history}") from error
-                settings = {**settings, "low_vram_mode": True, "texture_resolution": max(384, int(settings["texture_resolution"]) // 2)}
-                logger.warning("CUDA OOM; retrying with downgraded settings=%s", settings)
-                continue
-            else:
-                vram_metrics = monitor.stop()
-                vram_metrics["before"] = before or vram_metrics.get("before")
-                break
-        if result is None:
-            raise WorkerFailure("WORKER_ERROR", "Geometry worker completed without a result")
-        mesh_path = Path(result.payload["mesh_path"])
-        report = validate_glb(mesh_path)
-        if not report.valid:
-            raise WorkerFailure("PROVIDER_OUTPUT_INVALID", "; ".join(report.errors))
-        manifest.actual_provider = result.payload["provider"]
-        processed_views = [slot.view for slot in manifest.references.values() if slot.processed_path]
-        if len(processed_views) == 1:
-            warning = "Geometry was inferred from one reference view; hidden-side detail and texture quality may be approximate."
-            manifest.warnings = [item for item in manifest.warnings if not item.startswith("Geometry was inferred from one reference view;")]
-            manifest.warnings.append(warning)
-        manifest.stages[StageName.GEOMETRY.value].result = {"mesh_path": str(mesh_path.relative_to(job_dir)), "settings": settings, "retry_history": retry_history, "vram": vram_metrics, "stdout": result.stdout[-4000:], "validation": report.__dict__}
-        logger.info("Generated mesh saved: %s", mesh_path)
+        raise WorkerFailure("MODEL_MISSING", "No installed Hunyuan geometry provider matches the selected reference views")
 
     async def _textures(self, manifest: JobManifest, logger: logging.Logger) -> None:
         geometry = manifest.stages[StageName.GEOMETRY.value]

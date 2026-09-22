@@ -43,7 +43,7 @@ class StageRecord(BaseModel):
 
 
 QualityProfile = Literal["SAFE", "BALANCED", "MAX", "CUSTOM"]
-ProviderName = Literal["AUTO", "Spar3DProvider", "HunyuanMultiviewProvider", "HunyuanSingleViewProvider"]
+ProviderName = Literal["AUTO", "HunyuanMultiviewProvider", "HunyuanSingleViewProvider"]
 
 
 class ReferenceSlot(BaseModel):

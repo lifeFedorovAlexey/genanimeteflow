@@ -67,7 +67,8 @@ class FoundationTests(unittest.TestCase):
 
     def test_model_registry_reports_uninstalled_workers_without_claiming_availability(self) -> None:
         statuses = ModelRegistry().status()
-        self.assertTrue(any(item["id"] == "spar3d" for item in statuses))
+        self.assertFalse(any(item["id"] == "spar3d" for item in statuses))
+        self.assertTrue(any(item["id"] == "hunyuan3d-2" for item in statuses))
         self.assertTrue(all("reason" in item for item in statuses))
 
     def test_worker_protocol_rejects_non_json_worker_output(self) -> None:
