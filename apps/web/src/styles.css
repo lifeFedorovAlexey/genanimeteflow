@@ -105,3 +105,8 @@
   .next-card { align-items: flex-start; flex-wrap: wrap; }
   .next-copy p { white-space: normal; }
 }
+.content { display: flex; flex-direction: column; }
+.tester-layout { order: 3; }
+.dashboard-grid { order: 4; }
+.stages { order: 5; }
+.motion-library { order: 6; }
