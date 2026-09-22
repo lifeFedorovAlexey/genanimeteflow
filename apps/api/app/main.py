@@ -340,6 +340,23 @@ async def run_stage(job_id: str, stage: str) -> dict[str, str]:
     return {"status": "QUEUED", "stage": stage_name.value}
 
 
+@app.post("/api/jobs/{job_id}/build")
+async def build_job(job_id: str) -> dict[str, str]:
+    manifest = get_job(job_id)
+    if any(record.status is StageStatus.RUNNING for record in manifest.stages.values()) or (
+        job_id in runner.batch_tasks and not runner.batch_tasks[job_id].done()
+    ):
+        raise HTTPException(status_code=409, detail="A pipeline stage is already running for this unit")
+    asyncio.create_task(runner.run_all(job_id))
+    return {"status": "QUEUED", "job_id": job_id}
+
+
+@app.post("/api/jobs/{job_id}/build/cancel")
+async def cancel_build(job_id: str) -> dict[str, bool]:
+    get_job(job_id)
+    return {"cancelled": await runner.cancel_all(job_id)}
+
+
 @app.post("/api/jobs/{job_id}/stages/{stage}/cancel")
 async def cancel_stage(job_id: str, stage: str) -> dict[str, bool]:
     try:

@@ -16,7 +16,7 @@ from .config import REPO_ROOT
 from .model_registry import ModelRegistry
 from .motion_library import MotionLibrary
 from .equipment_library import EquipmentLibrary
-from .pipeline_graph import STAGE_DEPENDENCIES
+from .pipeline_graph import STAGE_DEPENDENCIES, STAGE_ORDER
 from .process_manager import ProcessManager, WorkerFailure
 from tools.validation.glb import extract_glb_images, validate_glb
 from .export_manifest import save_unit_manifest
@@ -73,6 +73,7 @@ class PipelineRunner:
         self.store = store
         self.queue = queue
         self.tasks: dict[tuple[str, str], asyncio.Task[None]] = {}
+        self.batch_tasks: dict[str, asyncio.Task[None]] = {}
         self.models = ModelRegistry()
         self.process_manager = ProcessManager()
 
@@ -100,6 +101,38 @@ class PipelineRunner:
         self.tasks[key] = task
         await task
 
+    async def run_all(self, job_id: str) -> None:
+        """Run the persisted dependency graph without rerunning READY stages."""
+        current = asyncio.current_task()
+        if current is not None:
+            self.batch_tasks[job_id] = current
+        optional = {StageName.CLOTHING, StageName.EQUIPMENT}
+        try:
+            for stage in STAGE_ORDER:
+                manifest = self.store.get(job_id)
+                if stage in optional and not getattr(manifest, f"{stage.value}_assets"):
+                    continue
+                record = manifest.stages[stage.value]
+                if record.status is StageStatus.READY:
+                    continue
+                await self.run(job_id, stage)
+                updated = self.store.get(job_id)
+                if updated.stages[stage.value].status is not StageStatus.READY:
+                    return
+                if stage is StageName.MOTIONS and not updated.export_actions:
+                    clips = updated.stages[StageName.MOTIONS.value].result.get("clips", [])
+                    actions = [
+                        str(item.get("worker", {}).get("normalized_action"))
+                        for item in clips
+                        if item.get("worker", {}).get("normalized_action")
+                    ]
+                    if actions:
+                        updated.export_actions = actions
+                        self.store.save(updated)
+        finally:
+            if self.batch_tasks.get(job_id) is current:
+                self.batch_tasks.pop(job_id, None)
+
     async def cancel(self, job_id: str, stage: StageName) -> bool:
         task = self.tasks.get((job_id, stage.value))
         if not task or task.done():
@@ -107,6 +140,18 @@ class PipelineRunner:
         process_cancelled = self.process_manager.cancel(f"{job_id}:{stage.value}")
         task.cancel()
         return process_cancelled or True
+
+    async def cancel_all(self, job_id: str) -> bool:
+        cancelled = False
+        manifest = self.store.get(job_id)
+        for stage in StageName:
+            if manifest.stages[stage.value].status is StageStatus.RUNNING:
+                cancelled = await self.cancel(job_id, stage) or cancelled
+        batch = self.batch_tasks.get(job_id)
+        if batch and not batch.done():
+            batch.cancel()
+            cancelled = True
+        return cancelled
 
     async def _run(self, job_id: str, stage: StageName) -> None:
         manifest = self.store.get(job_id)

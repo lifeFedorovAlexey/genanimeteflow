@@ -14,7 +14,7 @@ from app.job_store import JobStore
 from app.model_registry import ModelRegistry
 from app.process_manager import ProcessManager, WorkerFailure
 from app.pipeline_graph import downstream
-from app.runner import SingleGpuQueue
+from app.runner import PipelineRunner, SingleGpuQueue
 from app.reference_pipeline import assess_reference, preprocess_reference
 from app.schemas import JobCreateRequest, StageName, StageStatus
 from pydantic import ValidationError
@@ -48,6 +48,22 @@ class FoundationTests(unittest.TestCase):
             return peak
 
         self.assertEqual(asyncio.run(scenario()), 1)
+
+    def test_run_all_skips_optional_empty_stages_and_ready_work(self) -> None:
+        from unittest.mock import AsyncMock, patch
+
+        with tempfile.TemporaryDirectory() as temporary:
+            store = JobStore(Path(temporary))
+            manifest = store.create(JobCreateRequest())
+            for name in ("references", "geometry", "textures", "retopology", "rig", "ik", "motions"):
+                manifest.stages[name].status = StageStatus.READY
+            manifest.stages["export"].status = StageStatus.PENDING
+            manifest.export_actions = ["Idle_Loop"]
+            store.save(manifest)
+            runner = PipelineRunner(store, SingleGpuQueue())
+            with patch.object(runner, "run", new=AsyncMock()) as run:
+                asyncio.run(runner.run_all(manifest.job_id))
+            run.assert_awaited_once_with(manifest.job_id, StageName.EXPORT)
 
     def test_model_registry_reports_uninstalled_workers_without_claiming_availability(self) -> None:
         statuses = ModelRegistry().status()

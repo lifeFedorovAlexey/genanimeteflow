@@ -18,6 +18,7 @@
 .next-card.blocked .next-icon { color: #f0c878; background: #4c3c20; }
 .next-card.done .next-icon { color: #71dba7; background: #24523e; }
 .next-copy { flex: 1; min-width: 0; }
+.title-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .next-copy h3 { margin-top: 4px; }
 .next-copy p { color: #a0acbd; font-size: 11px; margin-top: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .error-banner { display: flex; gap: 10px; }
