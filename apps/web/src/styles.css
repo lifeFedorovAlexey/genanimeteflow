@@ -83,7 +83,7 @@
 @media (max-width: 1180px) {
   .content { display: block; }
   .dashboard-grid { display: grid; }
-  .references, .hardware, .tester-layout, .quality-panel { grid-column: auto; grid-row: auto; }
+  .references, .hardware, .tester-layout, .acceptance-panel, .quality-panel { grid-column: auto; grid-row: auto; }
   .tester-layout { margin-top: 16px; }
 }
 
@@ -111,7 +111,17 @@
 .stages { order: 5; }
 .motion-library { order: 6; }
 
-.quality-panel { grid-column: 1 / -1; grid-row: 6; margin-top: 16px; }
+.acceptance-panel { grid-column: 1 / -1; grid-row: 6; margin-top: 16px; }
+.acceptance-panel.accepted { border-color: #39775a; }
+.acceptance-panel.attention { border-color: #67522e; }
+.acceptance-metrics { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; color: #79d9a6; font-size: 10px; }
+.acceptance-metrics span { padding: 5px 7px; border-radius: 4px; background: #173126; }
+.acceptance-failures { margin-top: 13px; color: #f0c878; font-size: 10px; }
+.acceptance-failures summary { cursor: pointer; }
+.acceptance-failure { display: grid; gap: 3px; padding: 7px 0; border-top: 1px solid #3d3424; }
+.acceptance-failure strong { color: #e5c98d; font-size: 10px; }
+.acceptance-failure small { color: #b9a67b; line-height: 1.35; }
+.quality-panel { grid-column: 1 / -1; grid-row: 7; margin-top: 16px; }
 .quality-settings { color: #aebeff; font-size: 11px; }
 .quality-settings summary { cursor: pointer; list-style: none; font-weight: 600; }
 .quality-settings summary::-webkit-details-marker { display: none; }
