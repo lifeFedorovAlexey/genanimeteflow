@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Any, Iterable
 
 
 @dataclass(frozen=True)
@@ -262,3 +262,33 @@ def motion_clips_from_records(records: Iterable[dict]) -> tuple[MotionClip, ...]
             speed=item.get("speed"),
         ))
     return tuple(clips)
+
+
+def inspect_graph(clips: Iterable[MotionClip]) -> dict[str, Any]:
+    """Evaluate the playable contract against the exact normalized clip set."""
+    graph = AnimationGraph(clips)
+    cases = {
+        "idle": AnimationInput(),
+        "walk": AnimationInput(speed=1.0),
+        "run": AnimationInput(speed=2.0),
+        "sprint": AnimationInput(speed=3.0, sprinting=True),
+        "crouch": AnimationInput(crouched=True),
+        "jump_start": AnimationInput(grounded=False, vertical_velocity=2.0),
+        "jump_air": AnimationInput(grounded=False, vertical_velocity=0.0),
+        "fall": AnimationInput(grounded=False, vertical_velocity=-2.0),
+        "jump_land": AnimationInput(previous_state="fall"),
+    }
+    outputs = {state: graph.evaluate(inputs) for state, inputs in cases.items()}
+    missing_states = [state for state, output in outputs.items() if output.state != state or output.clip_id is None]
+    transition = graph.evaluate(AnimationInput(speed=1.0, previous_state="idle"))
+    attack = graph.evaluate(AnimationInput(action="attack", action_time=0.3))
+    return {
+        "valid": not missing_states and transition.transition == "idle->walk" and transition.transition_duration > 0 and attack.clip_id is not None,
+        "clip_count": len(graph.clips),
+        "missing_states": missing_states,
+        "transition": transition.transition,
+        "transition_duration": transition.transition_duration,
+        "attack_action": attack.action_name,
+        "root_motion_mode": transition.root_motion_mode,
+        "layer_count": len(transition.layers),
+    }

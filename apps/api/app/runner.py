@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Awaitable, Callable
 
 from .job_store import JobStore
+from .animation_graph import inspect_graph, motion_clips_from_records
 from .blender_discovery import blender_path
 from .config import REPO_ROOT
 from .model_registry import ModelRegistry
@@ -565,5 +566,10 @@ class PipelineRunner:
             if not report.valid or not rig_report.valid:
                 raise WorkerFailure("MOTION_OUTPUT_INVALID", "; ".join(report.errors + rig_report.errors))
             normalized.append({"clip_id": clip["id"], "source": clip["source_file"], "action": clip["name"], "category": clip.get("category", clip["name"]), "duration": clip.get("duration"), "loop": clip.get("loop", False), "root_motion": bool(clip.get("rootMotion", False)) or bool(result.payload.get("root_motion", False)), "required_equipment_type": clip.get("requiredEquipmentType"), "mesh_path": str(output_mesh.relative_to(job_dir)), "license": clip["license"], "allowed_for_commercial_use": clip["allowed_for_commercial_use"], "worker": result.payload, "validation": {"glb": report.__dict__, "rig": rig_report.__dict__}})
-        manifest.stages[StageName.MOTIONS.value].result = {"clips": normalized, "target_rig": mesh_value}
+        graph_report = inspect_graph(motion_clips_from_records(normalized))
+        manifest.stages[StageName.MOTIONS.value].result = {"clips": normalized, "target_rig": mesh_value, "graph": graph_report}
+        manifest.warnings = [warning for warning in manifest.warnings if not warning.startswith("Анимационный граф:")]
+        if graph_report["missing_states"]:
+            missing = ", ".join(graph_report["missing_states"])
+            manifest.warnings.append(f"Анимационный граф: не хватает состояний — {missing}.")
         logger.info("Normalized %s motion clips", len(normalized))

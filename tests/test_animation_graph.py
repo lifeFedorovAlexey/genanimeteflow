@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from app.animation_graph import AnimationGraph, AnimationInput, MotionClip
+from app.animation_graph import AnimationGraph, AnimationInput, MotionClip, inspect_graph
 
 
 CLIPS = [
@@ -105,3 +105,18 @@ class AnimationGraphTests(unittest.TestCase):
         fall = graph.evaluate(AnimationInput(grounded=False, vertical_velocity=-2.0))
         self.assertEqual(air.action_name, "Jump_Loop")
         self.assertEqual(fall.action_name, "Jump_Loop")
+
+    def test_graph_report_marks_complete_canonical_clip_set(self) -> None:
+        clips = [
+            MotionClip("idle", "Idle_Loop", "idle", 1.0, True),
+            MotionClip("walk", "Walk_Loop", "walk", 1.0, True),
+            MotionClip("sprint", "Sprint_Loop", "run", 1.0, True),
+            MotionClip("crouch", "Crouch_Fwd_Loop", "crouch", 1.0, True),
+            MotionClip("start", "Jump_Start", "jump", 1.0, False),
+            MotionClip("air", "Jump_Loop", "jump", 1.0, True),
+            MotionClip("land", "Jump_Land", "jump", 1.0, False),
+            MotionClip("attack", "Melee_Hook", "attack", 1.0, False),
+        ]
+        report = inspect_graph(clips)
+        self.assertTrue(report["valid"])
+        self.assertEqual(report["missing_states"], [])
