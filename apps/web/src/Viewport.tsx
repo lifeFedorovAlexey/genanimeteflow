@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { Bounds, Center, Grid, OrbitControls, useAnimations, useGLTF } from "@react-three/drei";
 import * as THREE from "three";
@@ -6,6 +6,17 @@ import { api } from "./api";
 
 type TesterStatus = { state: string; clip: string; action?: string | null; speed: number; time: number; rootMotion: boolean; direction_degrees: number; grounded: boolean; crouched: boolean; sprinting: boolean; transition?: string | null; blend: number; rootMotionMode: string };
 type RenderMode = "material" | "albedo" | "clay";
+type ActionBindingName = "primary" | "secondary" | "hit" | "death" | "previous" | "next";
+type ActionBindings = Record<ActionBindingName, string>;
+const DEFAULT_BINDINGS: ActionBindings = { primary: "1", secondary: "2", hit: "3", death: "4", previous: "q", next: "e" };
+
+function eventKey(value: string): string {
+  return value === " " ? "space" : value.toLowerCase();
+}
+
+function displayKey(value: string): string {
+  return value === "space" ? "Space" : value.length === 1 ? value.toUpperCase() : value;
+}
 
 function chooseState(keys: Set<string>): { state: string; speed: number } {
   if (keys.has(" ")) return { state: "jump", speed: 1 };
@@ -37,7 +48,7 @@ function DebugMarkers({ scene, showSockets, showIkTargets }: { scene: THREE.Obje
     const markers: THREE.Object3D[] = [];
     scene.traverse(object => {
       const name = object.name.toLowerCase();
-      if (name.endsWith("__debug")) return;
+      if (name.includes("__debug")) return;
       const isSocket = name.includes("socket_");
       const isIkTarget = name.includes("ik_target_");
       if (!isSocket && !isIkTarget) return;
@@ -68,7 +79,59 @@ function DebugMarkers({ scene, showSockets, showIkTargets }: { scene: THREE.Obje
   return null;
 }
 
-function AnimatedAsset({ url, selectedClip, activeAction, upperBodyAction, graphClip, graphBlend, wireframe, skeleton, showSockets, showIkTargets, showBounds, showClothing, showEquipment, renderMode, onActions, onAction, onStatus }: { url: string; selectedClip: string; activeAction: string; upperBodyAction: string; graphClip: string; graphBlend: GraphBlend[]; wireframe: boolean; skeleton: boolean; showSockets: boolean; showIkTargets: boolean; showBounds: boolean; showClothing: boolean; showEquipment: boolean; renderMode: RenderMode; onActions: (names: string[]) => void; onAction: (name: string) => void; onStatus: (status: TesterStatus) => void }) {
+function BoneMarkers({ scene, visible }: { scene: THREE.Object3D; visible: boolean }) {
+  useEffect(() => {
+    const markers: THREE.Mesh[] = [];
+    scene.traverse(object => {
+      if (!(object as THREE.Bone).isBone || object.name.includes("__debug")) return;
+      const marker = new THREE.Mesh(new THREE.SphereGeometry(0.025, 8, 6), new THREE.MeshBasicMaterial({ color: "#ff77c8" }));
+      marker.name = `${object.name}__bones_debug`;
+      object.add(marker);
+      markers.push(marker);
+    });
+    return () => markers.forEach(marker => { marker.parent?.remove(marker); marker.geometry.dispose(); (marker.material as THREE.Material).dispose(); });
+  }, [scene]);
+  useEffect(() => {
+    scene.traverse(object => { if (object.name.endsWith("__bones_debug")) object.visible = visible; });
+  }, [scene, visible]);
+  return null;
+}
+
+function NormalMarkers({ scene, visible }: { scene: THREE.Object3D; visible: boolean }) {
+  useEffect(() => {
+    const overlays: THREE.LineSegments[] = [];
+    scene.traverse(object => {
+      if (!(object as THREE.Mesh).isMesh || object.name.includes("__debug")) return;
+      const mesh = object as THREE.Mesh;
+      const position = mesh.geometry.getAttribute("position");
+      const normal = mesh.geometry.getAttribute("normal");
+      if (!position || !normal) return;
+      const step = Math.max(1, Math.ceil(position.count / 1200));
+      const points: number[] = [];
+      const start = new THREE.Vector3();
+      const end = new THREE.Vector3();
+      for (let index = 0; index < position.count; index += step) {
+        start.fromBufferAttribute(position, index);
+        end.copy(start).addScaledVector(new THREE.Vector3().fromBufferAttribute(normal, index).normalize(), 0.055);
+        points.push(start.x, start.y, start.z, end.x, end.y, end.z);
+      }
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute("position", new THREE.Float32BufferAttribute(points, 3));
+      const lines = new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({ color: "#72d8ff" }));
+      lines.name = `${object.name}__normals_debug`;
+      lines.frustumCulled = false;
+      object.add(lines);
+      overlays.push(lines);
+    });
+    return () => overlays.forEach(lines => { lines.parent?.remove(lines); lines.geometry.dispose(); (lines.material as THREE.Material).dispose(); });
+  }, [scene]);
+  useEffect(() => {
+    scene.traverse(object => { if (object.name.endsWith("__normals_debug")) object.visible = visible; });
+  }, [scene, visible]);
+  return null;
+}
+
+function AnimatedAsset({ url, selectedClip, activeAction, upperBodyAction, graphClip, graphBlend, wireframe, skeleton, showBones, showNormals, showSockets, showIkTargets, showBounds, showBody, showClothing, showEquipment, renderMode, bindings, onActions, onAction, onStatus }: { url: string; selectedClip: string; activeAction: string; upperBodyAction: string; graphClip: string; graphBlend: GraphBlend[]; wireframe: boolean; skeleton: boolean; showBones: boolean; showNormals: boolean; showSockets: boolean; showIkTargets: boolean; showBounds: boolean; showBody: boolean; showClothing: boolean; showEquipment: boolean; renderMode: RenderMode; bindings: ActionBindings; onActions: (names: string[]) => void; onAction: (name: string) => void; onStatus: (status: TesterStatus) => void }) {
   const root = useRef<THREE.Group>(null);
   const keys = useRef(new Set<string>());
   const activeClip = useRef("");
@@ -110,34 +173,35 @@ function AnimatedAsset({ url, selectedClip, activeAction, upperBodyAction, graph
     const actionCandidates = () => actionNames.filter(isActionName);
     const pick = (pattern: RegExp, fallbackIndex: number) => actionCandidates().find(name => pattern.test(name)) ?? actionCandidates()[fallbackIndex] ?? "";
     const down = (event: KeyboardEvent) => {
-      const key = event.key.toLowerCase();
-      if ([" ", "shift", "control", "w", "a", "s", "d"].includes(key)) { event.preventDefault(); keys.current.add(key); return; }
-      if (key === "1") onAction(pick(/attack|punch|shoot/i, 0));
-      if (key === "2") onAction(pick(/attack|punch|shoot|reload/i, 1));
-      if (key === "3") onAction(pick(/hit/i, 0));
-      if (key === "4") onAction(pick(/death/i, 0));
-      if (key === "q" || key === "e") {
+      const key = eventKey(event.key);
+      if (["space", "shift", "control", "w", "a", "s", "d"].includes(key)) { event.preventDefault(); keys.current.add(key === "space" ? " " : key); return; }
+      if (key === bindings.primary) onAction(pick(/attack|punch|shoot/i, 0));
+      if (key === bindings.secondary) onAction(pick(/attack|punch|shoot|reload/i, 1));
+      if (key === bindings.hit) onAction(pick(/hit/i, 0));
+      if (key === bindings.death) onAction(pick(/death/i, 0));
+      if (key === bindings.previous || key === bindings.next) {
         const candidates = actionCandidates();
         if (candidates.length) {
           const current = Math.max(0, candidates.indexOf(activeAction));
-          onAction(candidates[(current + (key === "q" ? candidates.length - 1 : 1)) % candidates.length]);
+          onAction(candidates[(current + (key === bindings.previous ? candidates.length - 1 : 1)) % candidates.length]);
         }
       }
     };
-    const up = (event: KeyboardEvent) => keys.current.delete(event.key.toLowerCase());
+    const up = (event: KeyboardEvent) => keys.current.delete(eventKey(event.key) === "space" ? " " : eventKey(event.key));
     window.addEventListener("keydown", down); window.addEventListener("keyup", up);
     return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); };
-  }, [actionNames, activeAction, onAction]);
+  }, [actionNames, activeAction, bindings, onAction]);
   useEffect(() => {
-    const originals: Array<{ mesh: THREE.Mesh; material: THREE.Material | THREE.Material[] }> = [];
+    const originals: Array<{ mesh: THREE.Mesh; material: THREE.Material | THREE.Material[]; visible: boolean }> = [];
     const diagnostics: THREE.Material[] = [];
     asset.scene.traverse(object => {
       const objectName = object.name.toLowerCase();
-      if (objectName.includes("clothing_") || objectName.includes("vest")) object.visible = showClothing;
-      if (objectName.includes("rifle") || objectName.includes("weapon") || objectName.includes("sword")) object.visible = showEquipment;
+      const isClothing = objectName.includes("clothing_") || objectName.includes("vest");
+      const isEquipment = objectName.includes("rifle") || objectName.includes("weapon") || objectName.includes("sword");
       if (!(object as THREE.Mesh).isMesh) return;
       const mesh = object as THREE.Mesh;
-      originals.push({ mesh, material: mesh.material });
+      originals.push({ mesh, material: mesh.material, visible: mesh.visible });
+      mesh.visible = isClothing ? showClothing : isEquipment ? showEquipment : showBody;
       const convert = (source: THREE.Material) => {
         const pbr = source as THREE.MeshStandardMaterial;
         const material = renderMode === "albedo"
@@ -157,10 +221,10 @@ function AnimatedAsset({ url, selectedClip, activeAction, upperBodyAction, graph
       mesh.material = Array.isArray(mesh.material) ? mesh.material.map(convert) : convert(mesh.material);
     });
     return () => {
-      for (const { mesh, material } of originals) mesh.material = material;
+      for (const { mesh, material, visible } of originals) { mesh.material = material; mesh.visible = visible; }
       for (const material of diagnostics) material.dispose();
     };
-  }, [asset.scene, showClothing, showEquipment, wireframe, renderMode]);
+  }, [asset.scene, showBody, showClothing, showEquipment, wireframe, renderMode]);
   const boundsHelper = useMemo(() => new THREE.BoxHelper(asset.scene, "#82a4ff"), [asset.scene]);
   useFrame(() => boundsHelper.update());
   useFrame((_, delta) => {
@@ -197,7 +261,7 @@ function AnimatedAsset({ url, selectedClip, activeAction, upperBodyAction, graph
     const statusKey = `${selected.state}|${clip}|${activeAction}|${upperClip}|${selected.speed}`;
     if (statusKey !== lastStatus.current) { lastStatus.current = statusKey; const moving = keys.current.has("w") || keys.current.has("a") || keys.current.has("s") || keys.current.has("d"); const angle = Math.atan2((keys.current.has("d") ? 1 : 0) - (keys.current.has("a") ? 1 : 0), (keys.current.has("w") ? 1 : 0) - (keys.current.has("s") ? 1 : 0)) * 180 / Math.PI; onStatus({ state: selected.state, clip, action: activeAction || null, speed: selected.speed, time: action?.time ?? 0, rootMotion: false, direction_degrees: moving ? angle : 0, grounded: !keys.current.has(" "), crouched: keys.current.has("control"), sprinting: keys.current.has("shift"), transition: null, blend: 1, rootMotionMode: "in_place" }); previousState.current = selected.state; }
   });
-  return <group ref={root}><primitive object={asset.scene} /><DebugMarkers scene={asset.scene} showSockets={showSockets} showIkTargets={showIkTargets} />{skeleton && <primitive object={skeletonHelper} />}<primitive object={boundsHelper} visible={showBounds} /></group>;
+  return <group ref={root}><primitive object={asset.scene} /><DebugMarkers scene={asset.scene} showSockets={showSockets} showIkTargets={showIkTargets} /><BoneMarkers scene={asset.scene} visible={showBones} /><NormalMarkers scene={asset.scene} visible={showNormals} />{skeleton && <primitive object={skeletonHelper} />}<primitive object={boundsHelper} visible={showBounds} /></group>;
 }
 
 export default function Viewport({ assetUrl, jobId, graphEnabled, equipmentType }: { assetUrl?: string; jobId?: string; graphEnabled?: boolean; equipmentType?: string | null }) {
@@ -207,18 +271,25 @@ export default function Viewport({ assetUrl, jobId, graphEnabled, equipmentType 
   const [upperBodyAction, setUpperBodyAction] = useState("");
   const [wireframe, setWireframe] = useState(false);
   const [skeleton, setSkeleton] = useState(false);
+  const [showBones, setShowBones] = useState(false);
+  const [showNormals, setShowNormals] = useState(false);
   const [showSockets, setShowSockets] = useState(false);
   const [showIkTargets, setShowIkTargets] = useState(false);
   const [showBounds, setShowBounds] = useState(false);
+  const [showBody, setShowBody] = useState(true);
   const [showClothing, setShowClothing] = useState(true);
   const [showEquipment, setShowEquipment] = useState(true);
   const [renderMode, setRenderMode] = useState<RenderMode>("material");
   const [status, setStatus] = useState<TesterStatus>({ state: "idle", clip: "", speed: 1, time: 0, rootMotion: false, direction_degrees: 0, grounded: true, crouched: false, sprinting: false, blend: 1, rootMotionMode: "in_place" });
   const [graphClip, setGraphClip] = useState("");
   const [graphBlend, setGraphBlend] = useState<GraphBlend[]>([]);
+  const [bindings, setBindings] = useState<ActionBindings>(DEFAULT_BINDINGS);
+  const [capturingBinding, setCapturingBinding] = useState<ActionBindingName | null>(null);
   const handleActions = useCallback((names: string[]) => { setActions(names); setSelectedClip(current => current && names.includes(current) ? current : ""); setActiveAction(current => current && names.includes(current) ? current : ""); setUpperBodyAction(current => current && names.includes(current) ? current : ""); }, []);
   const handleAction = useCallback((name: string) => { setActiveAction(name); setSelectedClip(""); }, []);
   const handleStatus = useCallback((next: TesterStatus) => { if (jobId && graphEnabled) void api.evaluateAnimationGraph(jobId, { speed: next.speed, direction_degrees: next.direction_degrees, grounded: next.grounded, crouched: next.crouched, sprinting: next.sprinting, equipment_type: equipmentType ?? null, action: next.action ?? null, action_time: next.time, combo_index: 0, previous_state: status.state, upper_body_action: upperBodyAction || null }).then(result => { setGraphClip(result.action_name ?? ""); setGraphBlend(result.blend_tree ?? []); setStatus({ ...next, transition: result.transition, blend: result.blend, rootMotion: result.root_motion, rootMotionMode: result.root_motion_mode }); }).catch(() => { setGraphBlend([]); setStatus(next); }); else setStatus(next); }, [equipmentType, graphEnabled, jobId, status.state, upperBodyAction]);
   const actionNames = useMemo(() => actions.filter(isActionName), [actions]);
-  return <div className="viewport-shell"><div className="viewport"><Canvas camera={{ position: [0, 0.8, -3], fov: 42 }}><color attach="background" args={["#0c0e12"]} /><ambientLight intensity={1.2} /><directionalLight position={[3, 5, 2]} intensity={2} /><Grid args={[10, 10]} cellColor="#29303a" sectionColor="#4a5666" fadeDistance={12} />{assetUrl && <Bounds key={assetUrl} fit clip observe margin={1.3}><Center top><AnimatedAsset key={assetUrl} url={assetUrl} renderMode={renderMode} selectedClip={selectedClip} activeAction={activeAction} upperBodyAction={upperBodyAction} graphClip={graphClip} graphBlend={graphBlend} wireframe={wireframe} skeleton={skeleton} showSockets={showSockets} showIkTargets={showIkTargets} showBounds={showBounds} showClothing={showClothing} showEquipment={showEquipment} onActions={handleActions} onAction={handleAction} onStatus={handleStatus} /></Center></Bounds>}<OrbitControls makeDefault /></Canvas><div className={`viewport-empty ${assetUrl ? "has-asset" : ""}`}><span>{assetUrl ? "Validated asset" : "Unit Tester"}</span><small>{assetUrl ? "WASD move · Shift sprint · Ctrl crouch · Space jump" : "Validated GLB assets will appear here"}</small></div></div>{assetUrl && <div className="tester-toolbar"><label>View<select aria-label="Render mode" value={renderMode} onChange={event => setRenderMode(event.target.value as RenderMode)}><option value="material">Materials</option><option value="albedo">Base color</option><option value="clay">Geometry</option></select></label><label>Clip<select value={selectedClip} onChange={event => { setSelectedClip(event.target.value); setActiveAction(""); }} disabled={!actions.length}><option value="">Graph / auto state</option>{actions.map(name => <option key={name} value={name}>{name}</option>)}</select></label><label>Upper body<select aria-label="Upper body action" value={upperBodyAction} onChange={event => setUpperBodyAction(event.target.value)} disabled={!actions.length}><option value="">None</option>{actions.map(name => <option key={name} value={name}>{name}</option>)}</select></label><div className="action-buttons"><button className="debug-toggle" onClick={() => handleAction(actionNames[0] ?? "")} disabled={!actionNames.length}>1 Attack</button><button className="debug-toggle" onClick={() => handleAction(actionNames[1] ?? actionNames[0] ?? "")} disabled={!actionNames.length}>2 Alt</button><button className="debug-toggle" onClick={() => handleAction(actionNames.find(name => /hit/i.test(name)) ?? "")} disabled={!actionNames.some(name => /hit/i.test(name))}>3 Hit</button><button className="debug-toggle" onClick={() => handleAction(actionNames.find(name => /death/i.test(name)) ?? "")} disabled={!actionNames.some(name => /death/i.test(name))}>4 Death</button><button className="debug-toggle" onClick={() => setActiveAction("")}>Clear action</button></div><label className="debug-toggle"><input type="checkbox" checked={wireframe} onChange={event => setWireframe(event.target.checked)} /> Wireframe</label><label className="debug-toggle"><input type="checkbox" checked={skeleton} onChange={event => setSkeleton(event.target.checked)} /> Skeleton</label><label className="debug-toggle"><input type="checkbox" checked={showSockets} onChange={event => setShowSockets(event.target.checked)} /> Sockets</label><label className="debug-toggle"><input type="checkbox" checked={showIkTargets} onChange={event => setShowIkTargets(event.target.checked)} /> IK targets</label><label className="debug-toggle"><input type="checkbox" checked={showBounds} onChange={event => setShowBounds(event.target.checked)} /> Bounds</label><label className="debug-toggle"><input type="checkbox" checked={showClothing} onChange={event => setShowClothing(event.target.checked)} /> Clothing</label><label className="debug-toggle"><input type="checkbox" checked={showEquipment} onChange={event => setShowEquipment(event.target.checked)} /> Equipment</label><div className="tester-stats"><span>{status.state}</span><span>{status.clip || "no clip"}</span><span>{activeAction ? `action:${activeAction}` : "action:none"}</span><span>{upperBodyAction ? `upper:${upperBodyAction}` : "upper:none"}</span><span>{status.speed.toFixed(1)}×</span><span>{status.blend.toFixed(2)} blend</span><span>{status.rootMotionMode}</span>{status.transition && <span>{status.transition}</span>}</div></div>}</div>;
+  const captureKey = (event: ReactKeyboardEvent<HTMLButtonElement>) => { if (!capturingBinding) return; event.preventDefault(); event.stopPropagation(); if (event.key === "Escape") { setCapturingBinding(null); return; } setBindings(current => ({ ...current, [capturingBinding]: eventKey(event.key) })); setCapturingBinding(null); };
+  const bindingRows: Array<[ActionBindingName, string]> = [["primary", "Primary attack"], ["secondary", "Secondary action"], ["hit", "Hit"], ["death", "Death"], ["previous", "Previous action"], ["next", "Next action"]];
+  return <div className="viewport-shell"><div className="viewport"><Canvas camera={{ position: [0, 0.8, -3], fov: 42 }}><color attach="background" args={["#0c0e12"]} /><ambientLight intensity={1.2} /><directionalLight position={[3, 5, 2]} intensity={2} /><Grid args={[10, 10]} cellColor="#29303a" sectionColor="#4a5666" fadeDistance={12} />{assetUrl && <Bounds key={assetUrl} fit clip observe margin={1.3}><Center top><AnimatedAsset key={assetUrl} url={assetUrl} renderMode={renderMode} selectedClip={selectedClip} activeAction={activeAction} upperBodyAction={upperBodyAction} graphClip={graphClip} graphBlend={graphBlend} wireframe={wireframe} skeleton={skeleton} showBones={showBones} showNormals={showNormals} showSockets={showSockets} showIkTargets={showIkTargets} showBounds={showBounds} showBody={showBody} showClothing={showClothing} showEquipment={showEquipment} bindings={bindings} onActions={handleActions} onAction={handleAction} onStatus={handleStatus} /></Center></Bounds>}<OrbitControls makeDefault /></Canvas><div className={`viewport-empty ${assetUrl ? "has-asset" : ""}`}><span>{assetUrl ? "Validated asset" : "Unit Tester"}</span><small>{assetUrl ? "WASD move · Shift sprint · Ctrl crouch · Space jump" : "Validated GLB assets will appear here"}</small></div></div>{assetUrl && <div className="tester-toolbar"><label>View<select aria-label="Render mode" value={renderMode} onChange={event => setRenderMode(event.target.value as RenderMode)}><option value="material">Materials</option><option value="albedo">Base color</option><option value="clay">Geometry</option></select></label><label>Clip<select value={selectedClip} onChange={event => { setSelectedClip(event.target.value); setActiveAction(""); }} disabled={!actions.length}><option value="">Graph / auto state</option>{actions.map(name => <option key={name} value={name}>{name}</option>)}</select></label><label>Upper body<select aria-label="Upper body action" value={upperBodyAction} onChange={event => setUpperBodyAction(event.target.value)} disabled={!actions.length}><option value="">None</option>{actions.map(name => <option key={name} value={name}>{name}</option>)}</select></label><div className="action-buttons"><button className="debug-toggle" onClick={() => handleAction(actionNames[0] ?? "")} disabled={!actionNames.length}>{displayKey(bindings.primary)} Attack</button><button className="debug-toggle" onClick={() => handleAction(actionNames[1] ?? actionNames[0] ?? "")} disabled={!actionNames.length}>{displayKey(bindings.secondary)} Alt</button><button className="debug-toggle" onClick={() => handleAction(actionNames.find(name => /hit/i.test(name)) ?? "")} disabled={!actionNames.some(name => /hit/i.test(name))}>{displayKey(bindings.hit)} Hit</button><button className="debug-toggle" onClick={() => handleAction(actionNames.find(name => /death/i.test(name)) ?? "")} disabled={!actionNames.some(name => /death/i.test(name))}>{displayKey(bindings.death)} Death</button><button className="debug-toggle" onClick={() => setActiveAction("")}>Clear action</button></div><details className="binding-settings"><summary>Keys</summary><div className="binding-grid">{bindingRows.map(([name, label]) => <button key={name} onClick={() => setCapturingBinding(name)} onKeyDown={captureKey} className={capturingBinding === name ? "capturing" : ""} aria-label={`${label}: ${displayKey(bindings[name])}`}>{label}<kbd>{capturingBinding === name ? "press key" : displayKey(bindings[name])}</kbd></button>)}</div></details><label className="debug-toggle"><input type="checkbox" checked={wireframe} onChange={event => setWireframe(event.target.checked)} /> Wireframe</label><label className="debug-toggle"><input type="checkbox" checked={skeleton} onChange={event => setSkeleton(event.target.checked)} /> Skeleton</label><label className="debug-toggle"><input type="checkbox" checked={showBones} onChange={event => setShowBones(event.target.checked)} /> Bones</label><label className="debug-toggle"><input type="checkbox" checked={showNormals} onChange={event => setShowNormals(event.target.checked)} /> Normals</label><label className="debug-toggle"><input type="checkbox" checked={showSockets} onChange={event => setShowSockets(event.target.checked)} /> Sockets</label><label className="debug-toggle"><input type="checkbox" checked={showIkTargets} onChange={event => setShowIkTargets(event.target.checked)} /> IK targets</label><label className="debug-toggle"><input type="checkbox" checked={showBounds} onChange={event => setShowBounds(event.target.checked)} /> Bounds</label><label className="debug-toggle"><input type="checkbox" checked={showBody} onChange={event => setShowBody(event.target.checked)} /> Body</label><label className="debug-toggle"><input type="checkbox" checked={showClothing} onChange={event => setShowClothing(event.target.checked)} /> Clothing</label><label className="debug-toggle"><input type="checkbox" checked={showEquipment} onChange={event => setShowEquipment(event.target.checked)} /> Equipment</label><div className="tester-stats"><span>{status.state}</span><span>{status.clip || "no clip"}</span><span>{activeAction ? `action:${activeAction}` : "action:none"}</span><span>{upperBodyAction ? `upper:${upperBodyAction}` : "upper:none"}</span><span>{status.speed.toFixed(1)}×</span><span>{status.blend.toFixed(2)} blend</span><span>{status.rootMotionMode}</span>{status.transition && <span>{status.transition}</span>}</div></div>}</div>;
 }
