@@ -79,7 +79,7 @@ class AnimationGraph:
         if inputs.action:
             state = self._action_state(inputs.action, inputs.action_time)
             clip = self._select(inputs.action, inputs.equipment_type, inputs.combo_index)
-            return self._output(state, clip, inputs.action_time, False, "action state", inputs)
+            return self._output(state, clip, inputs.action_time, True, "action state", inputs)
         if not inputs.grounded:
             state = "jump_start" if inputs.vertical_velocity > 0.1 else "jump_air" if inputs.vertical_velocity >= -0.1 else "fall"
             clip = self._select(state, inputs.equipment_type, 0) or self._select("jump", inputs.equipment_type, 0)
