@@ -31,14 +31,14 @@ Each checked item must have working code, automated coverage where practical, a 
 - [x] Implement licensed motion library installation, normalization and catalog validation (UAL2 Standard CC0 fixture: 43 clips, real local install and catalog scan)
 - [x] Add real Blender canonical-bone retarget worker with bake and GLB roundtrip validation (runtime requires Blender and installed source clips)
 - [x] Connect installed motion clips to job selection, catalog validation and the motions stage
-- [x] Connect graph evaluation endpoint to normalized Blender actions and Unit Tester state changes (full blend-tree/IK layers remain separate)
+- [x] Connect graph evaluation endpoint to normalized Blender actions and Unit Tester state changes (upper-body bone-mask playback and source-gated additive contract are implemented; full acceptance clips remain)
 - [ ] Implement retargeting and the canonical animation graph (canonical retarget worker is real and smoke-tested; full graph blending, locomotion transitions and acceptance clips remain)
 - [x] Implement equipment, clothing, sockets and IK validation (real acceptance run: Utility Vest + CC0 Lightning Rifle, one socket, four IK targets/constraints)
 - [x] Add validated local equipment manifest/catalog registration with license-independent provenance and socket/grip metadata
 - [x] Add Blender rigid-equipment socket attachment stage with output and skeleton validation (skinned clothing and IK remain separate stages)
 - [x] Load validated GLB assets in Unit Tester with embedded clip playback, WASD movement states and wireframe/skeleton debug toggles
 - [x] Implement GLB/FBX export worker and manifest roundtrip validation (runtime requires Blender and selected normalized actions)
-- [ ] Harden recovery, cancellation, cache cleanup, security and full acceptance test
+- [ ] Harden recovery, cancellation, cache cleanup, security and full acceptance test (recovery/cancellation/cache cleanup, acceptance verifier and path-boundary tests are implemented; end-to-end fresh-run sign-off remains)
 
 ## Commit convention
 

@@ -13,6 +13,7 @@ from .config import ensure_directories
 from .animation_graph import AnimationGraph, AnimationInput, MotionClip
 from .capabilities import capabilities
 from .cache import clean as clean_cache, inventory as cache_inventory
+from .acceptance import validate_job
 from .equipment_library import EquipmentLibrary, EquipmentLibraryError
 from .hardware import detect_hardware
 from .job_store import JobStore
@@ -218,6 +219,12 @@ def get_job(job_id: str) -> JobManifest:
         return store.get(job_id)
     except (FileNotFoundError, ValueError):
         raise HTTPException(status_code=404, detail="Job not found")
+
+
+@app.get("/api/jobs/{job_id}/acceptance")
+def get_acceptance(job_id: str) -> dict:
+    manifest = get_job(job_id)
+    return validate_job(manifest, store.job_dir(job_id))
 
 
 @app.post("/api/jobs/{job_id}/references/{view}", response_model=JobManifest)
