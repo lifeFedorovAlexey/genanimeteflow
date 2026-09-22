@@ -135,7 +135,7 @@ def evaluate_animation_graph(job_id: str, request: AnimationGraphRequest) -> dic
     clips: list[MotionClip] = []
     for item in motions.result.get("clips", []):
         worker = item.get("worker", {})
-        clips.append(MotionClip(id=str(item["clip_id"]), name=str(worker.get("normalized_action") or item["action"]), category=str(item.get("category") or item["action"]), duration=float(item.get("duration") or 1.0), loop=bool(item.get("loop", False)), required_equipment_type=item.get("required_equipment_type")))
+        clips.append(MotionClip(id=str(item["clip_id"]), name=str(worker.get("normalized_action") or item["action"]), category=str(item.get("category") or item["action"]), duration=float(item.get("duration") or 1.0), loop=bool(item.get("loop", False)), required_equipment_type=item.get("required_equipment_type"), direction_degrees=item.get("direction_degrees"), layer=str(item.get("layer") or "base"), additive=bool(item.get("additive", False)), root_motion=bool(item.get("root_motion", True))))
     if not clips:
         raise HTTPException(status_code=409, detail="Normalized motions contain no clips")
     output = AnimationGraph(clips).evaluate(AnimationInput(**request.model_dump()))

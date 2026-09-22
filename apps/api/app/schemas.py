@@ -125,3 +125,8 @@ class AnimationGraphRequest(BaseModel):
     action: str | None = None
     action_time: float = 0.0
     combo_index: int = 0
+    previous_state: str | None = None
+    delta_time: float = 0.0
+    root_motion_enabled: bool = True
+    upper_body_action: str | None = None
+    emote: str | None = None
